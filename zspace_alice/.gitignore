@@ -1,0 +1,32 @@
+# Any binaries, intermediate binaries or project files
+**/bin
+**/bin-int
+**/project
+!Dependencies/**/bin
+
+# Compiled files
+EXE/*.exe
+EXE/*.lib
+EXE/*.pdb
+EXE/*.exp
+
+# DLLs
+EXE/lib_zspace/*
+EXE/lib_omniverse/*
+
+# Data
+EXE/data/NatPower/*
+
+#Clangd stuff
+compile_commands.json
+.cache/
+
+# Visual studio files and solution files
+.vs/
+*.sln
+
+# Build system paths
+paths.lua
+
+# Other files
+**/desktop.ini
