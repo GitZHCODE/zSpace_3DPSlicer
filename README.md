@@ -1,6 +1,6 @@
 # zSpace 3DPSlicer - A C++ SDF-based Mesh Slicing Library
 
-![zSpace Logo](documentation/Assets/zSpace_logo.png)
+![Slicer Image](documentation/Assets/zSpace3DPSlicer.jpg)
 
 ## Introduction
 
