@@ -1,22 +1,16 @@
-# zSpace 3DPSlicer - A C++ SDF-based Mesh Slicing Library
+# ZSPACE 3DPSlicer - A SDF-based Mesh Slicing Library
 
 ![Slicer Image](documentation/Assets/zSpace3DPSlicer.jpg)
 
 ## Introduction
 
-zSpace 3DPSlicer is a powerful C++ library for SDF (Signed Distance Field) based mesh slicing. We provide comprehensive functionality for generating profile curves for 3DPrinting, including construction of scalar fields, boolean operations, and contour extraction. The library is designed to work seamlessly with complex architectural geometries and supports advanced manufacturing workflows.
+The presented toolkit is driven by the rapid advancement of large-scale 3D concrete printing (3DCP) and addresses the current lack of design tools and integrated design-to-production (DTP) solutions tailored to this fabrication method. It is founded on a novel insight: that design and analysis methods traditionally developed for unreinforced masonry can be effectively adapted to layered, large-scale 3D printing with compression-favouring materials such as concrete. 
 
-It is **a header-only library** built on the zSpace framework. You do not need to compile anything to use, just include the necessary headers (e.g. `#include <zTsSDFSlicer.h>`) and run. The library is tailored to operate on triangle meshes and provides robust SDF computation for slicing operations.
+At the core of this initiative is the **3DP Slicer**, an open-source computer-aided design (CAD) toolkit. This slicer forms an important component of a broader, integrated DTP framework that has been field-tested across multiple projects to realize the geometric and structural advantages of 3DCP. (See the [Pilot Projects](#pilot-projects) section for further details.) The slicer is embedded within [ZSPACE](documentation/zSpace.md), a proprietary, state-of-the-art computational framework primarily developed in C++. 
 
-*Optionally* the library may also be pre-compiled into a statically linked library, for faster compile times with your projects. This only affects compile time (run-time performance and behavior is identical).
+The toolkit employs a **mesh-based geometry-processing paradigm**, which is widely recognized in structure- and fabrication-aware geometry processing. It adopts **JavaScript Object Notation (JSON)** and **half-edge mesh data structures** — standard tools in this domain — for the transmission and manipulation of 3D model data. 
 
-We use the **[zSpace framework](documentation/zSpace.md)** extensively in our code, providing a solid foundation for computational geometry operations and 3DPrinting workflows.
-
-## Tutorial
-
-The library includes comprehensive documentation and examples. Start with our main tutorial:
-
-**[SDF Slicer Tutorial](documentation/zTsSDFSlicer.md)** - WIP guide to using the SDF-based mesh slicing functionality
+To generate cross-sectional profiles, the toolkit uses **weighted plane interpolations** and **geodesics** to slice the input geometry. These profiles are then refined using **Signed Distance Fields (SDFs)** and Boolean operations. This process allows precise control over cross-sectional thicknesses, supports the specification of print widths and infill patterns - enabling the inclusion of local stiffeners and slots for post-tensioning cables— and facilitating the creation of a continuous print path. 
 
 ## Pilot Projects
 
@@ -34,7 +28,7 @@ The library includes comprehensive documentation and examples. Start with our ma
 [Website](https://www.zaha-hadid.com/2024/01/05/phoenix-the-new-3d-printed-concrete-bridge/) • [Paper](https://www.researchgate.net/profile/Alessandro-Dellendice/publication/379595580_STRIATUS_20_PHOENIX_-_IMPROVING_CIRCULARITY_OF_3D-CONCRETE-PRINTED_UNREINFORCED_MASONRY_STRUCTURES/links/6614ecc643f8df018de76b34/STRIATUS-20-PHOENIX-IMPROVING-CIRCULARITY-OF-3D-CONCRETE-PRINTED-UNREINFORCED-MASONRY-STRUCTURES.pdf?origin=scientificContributions) • [Video](https://www.youtube.com/watch?v=Kvrg0pVGOhs)
 
 ### NatpowerH Hydrogen Refuelling Stations
-**Venice, ongoing** - The world's first green hydrogen refuelling infrastructure for the creational boating industry in Italy. 
+**2023 - present** - The world's first green hydrogen refuelling infrastructure for the creational boating industry in Italy. 
 <font color="grey" size="2"><i>Project developed by Natpower Group and designed by Zaha Hadid Architects with Foreign Engineers and incremental3D (in3D).</i></font>
 [Website](https://www.zaha-hadid.com/architecture/natpower-h-hydrogen-refuelling-stations/) • [Video](https://www.youtube.com/watch?v=cMIW7WFBSBs)
 
@@ -118,8 +112,8 @@ zSpace 3DPSlicer is licensed under [MIT License](https://opensource.org/licenses
 If you use zSpace 3DPSlicer in your academic projects, please cite our work:
 
 ```bibtex
-@misc{zspace3dslicer,
-  title = {{zSpace 3DPSlicer}: A C++ SDF-based Mesh Slicing Library},
+@misc{zspace3dpslicer,
+  title = {{zSpace 3DPSlicer}: A SDF-based Mesh Slicing Library},
   author = {[Vishu Bhooshan, Taizhong Chen, Heba Eiz, Vlad Levyant, Lin Wo, Shajay Bhooshan and others]},
   note = {https://github.com/GitZHCODE/zspace_3DPSlicer},
   year = {2025},
