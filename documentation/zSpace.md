@@ -12,3 +12,13 @@ Spatial Technology Stack
 
 ![](Assets/zSpace/AG_Stack_2022.png)
 <font color="grey">*Figure 2: Spatial Technology Stack*</font>
+
+**Zaha Hadid Architects Computation and Design Group (ZHACODE)** explores novel spatial and experiential affordances of new technologies in structure, fabrication-aware geometry, robotic fabrication, and industrialized construction. The team incorporates these advances into workflows at ZHA to address pressing issues of participatory and sustainable development of the built environment. 
+
+ZHACODE investigates design domain problems where computation can supplement human intuition, to improve speed, to assimilate data, and to discover novel possibilities. Research is incrementally accrued through systemic development and pilot testing in fundamental topics or trajectories of focus. These are refined over time and methods mature toward increasingly constrained commercial project applications.  
+
+**ZSPACE**, a so-called spatial technology stack (STS), is the convergence of spatial design disciplines with computational technologies associated with architectural geometry (AG), computer graphics (CG) and gaming. It is a state-of-the-art, proprietary computational code framework to synthesize high-performance geometries and consequently enables their structural optimisation, parametric modelling and coordination with Building Information Modelling (BIM). The framework also assimilates field-tested research and development in early-stage design optioneering, robotic construction technologies, and digital upgrade of historical design and construction techniques in timber and masonry. Additionally, the framework powers applied research in emerging technologies of machine learning and artificial intelligence, geographic information systems and spatial data.
+
+---
+
+*ZHACODE | Computation and Design Group, Zaha Hadid Architects*

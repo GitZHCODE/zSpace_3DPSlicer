@@ -132,7 +132,9 @@ mySlicer.exportJSON(currentPath, exportPath, "3dp_block", printLayerWidth, raftL
 ZSPACE framework provides ALICE, visualize meshes, their attributes as well as debugging information to test sketches.
 ![](Assets/zTsSDFSlicer/AliceSlicer.png)
 
-## Post-Processing
+---
+
+*ZHACODE | Computation and Design Group, Zaha Hadid Architects*
 
 
 
