@@ -12,6 +12,8 @@ The toolkit employs a **mesh-based geometry-processing paradigm**, which is wide
 
 To generate cross-sectional profiles, the toolkit uses **weighted plane interpolations** and **geodesics** to slice the input geometry. These profiles are then refined using **Signed Distance Fields (SDFs)** and Boolean operations. This process allows precise control over cross-sectional thicknesses, supports the specification of print widths and infill patterns - enabling the inclusion of local stiffeners and slots for post-tensioning cables— and facilitating the creation of a continuous print path. 
 
+![BlockTypes](documentation/Assets/zTsSDFSlicer/zSpace3DPSlicer_PrintBlocks.jpg)
+
 ## Pilot Projects
 
 
