@@ -49,6 +49,17 @@ To run the demo:
 
 The demo provides a simple interface to test the core functionality without requiring compilation.
 
+A video demonstration of the slicer's capabilities can be found here:
+[![Slicer Demo](https://img.youtube.com/vi/54DTETqvvwc/0.jpg)](https://www.youtube.com/watch?v=54DTETqvvwc)
+
+The demo showcases:
+- Loading and visualizing 3D meshes
+- Configuring slicing parameters
+- Generating print paths
+- Exporting results
+- Real-time visualization of slicing results
+
+
 ## Installation
 zSpace 3DPSlicer is a **header-only** library with visualization capabilities provided by the ALICE viewer.
 
