@@ -19,18 +19,21 @@ To generate cross-sectional profiles, the toolkit uses **weighted plane interpol
 
 ### Striatus Bridge
 **Venice, 2021** - Striatus is an arched, unreinforced masonry footbridge composed of 3D-printed concrete blocks assembled without mortar.
+
 <font color="grey" size="2"><i>Project developed by the Block Research Group (BRG) at ETH Zurich, Zaha Hadid Architects Computation and Design Group (ZHACODE), incremental3D (in3D), and Holcim.</i></font>
 
 [Website](https://www.zaha-hadid.com/design/striatus/) • [Paper](https://www.sciencedirect.com/science/article/pii/S0141029623009495) • [Video](https://www.youtube.com/watch?v=kq2WJ8N5D0o&t=103s)
 
 ### Striatus Bridge 2.0: Phoenix
 **Lyon, 2024** - Phoenix, as an iteration of the Striatus bridge, shows a significant advancement in the application of an unreinforced-masonry structural logic to 3D concrete printing (3DCP), mainly on circularity, environmental impact reduction, and structural robustness aspects. 
+
 <font color="grey" size="2"><i>Project developed by the Block Research Group (BRG) at ETH Zurich, Zaha Hadid Architects Computation and Design Group (ZHACODE), incremental3D (in3D), and Holcim.</i></font>
 
 [Website](https://www.zaha-hadid.com/2024/01/05/phoenix-the-new-3d-printed-concrete-bridge/) • [Paper](https://www.researchgate.net/profile/Alessandro-Dellendice/publication/379595580_STRIATUS_20_PHOENIX_-_IMPROVING_CIRCULARITY_OF_3D-CONCRETE-PRINTED_UNREINFORCED_MASONRY_STRUCTURES/links/6614ecc643f8df018de76b34/STRIATUS-20-PHOENIX-IMPROVING-CIRCULARITY-OF-3D-CONCRETE-PRINTED-UNREINFORCED-MASONRY-STRUCTURES.pdf?origin=scientificContributions) • [Video](https://www.youtube.com/watch?v=Kvrg0pVGOhs)
 
 ### NatpowerH Hydrogen Refuelling Stations
 **2023 - present** - The world's first green hydrogen refuelling infrastructure for the creational boating industry in Italy. 
+
 <font color="grey" size="2"><i>Project developed by Natpower Group and designed by Zaha Hadid Architects with Foreign Engineers and incremental3D (in3D).</i></font>
 
 [Website](https://www.zaha-hadid.com/architecture/natpower-h-hydrogen-refuelling-stations/) • [Video](https://www.youtube.com/watch?v=cMIW7WFBSBs)
