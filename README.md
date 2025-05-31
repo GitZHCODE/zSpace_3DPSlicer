@@ -65,7 +65,7 @@ The demo showcases:
 
 
 ## Installation
-zSpace 3DPSlicer is a **header-only** library with visualization capabilities provided by the ALICE viewer.
+zSpace 3DPSlicer is a C++ library with visualization capabilities provided by the ALICE viewer.
 
 ### Requirements
 * Visual Studio 2019+ (Windows)
