@@ -4,6 +4,8 @@ tzSketch/
 _intermediate/
 *.tlog/
 *.zip
+build/
+dist/
 
 ##projects/
 ##*.sln
