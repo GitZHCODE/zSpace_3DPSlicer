@@ -1,4 +1,4 @@
-name: project_py_cpp-dev
+name: 3dpslicer-dev
 channels:
   - conda-forge
   - defaults

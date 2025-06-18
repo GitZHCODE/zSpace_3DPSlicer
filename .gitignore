@@ -6,6 +6,10 @@ _intermediate/
 *.zip
 build/
 dist/
+external/
+
+## Not ignore
+
 
 ##projects/
 ##*.sln
