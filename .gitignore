@@ -3,6 +3,7 @@ tzSketch/
 *.pdb
 _intermediate/
 *.tlog/
+*.zip
 
 ##projects/
 ##*.sln
