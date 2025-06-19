@@ -5,9 +5,11 @@ z3DPSlicer - A minimal C++/Python project using nanobind and COMPAS
 __version__ = "0.1.0"
 from .datastructures.zBlock import ZBlock
 
+
 # Import C++ extensions
 try:
     from . import _primitives
+    from . import _slicer
     # Import the add function directly
     from ._primitives import add
 except ImportError as e:

@@ -5,7 +5,7 @@ import compas
 from z3DPSlicer.datastructures.zBlock import ZBlock
 from compas_viewer import Viewer
 
-local_path = "C:/Users/Wo.Lin/source/repos/zspace_alice/EXE/data/IN/blockJson/blockMesh_0.json"
+local_path = "./data/blockMesh_23.json"
 zblock = ZBlock()
 zblock.from_zjson(local_path)
 mesh = zblock.mesh
@@ -14,7 +14,9 @@ endPlane = zblock.endPlane
 viewer = Viewer()
 viewer.scene.add(mesh)
 viewer.scene.add(startPlane)
+viewer.scene.add(startPlane.point)
 viewer.scene.add(endPlane)
+viewer.scene.add(endPlane.point)
 viewer.show()
 
 
