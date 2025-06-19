@@ -1,4 +1,4 @@
-name: 3dpslicer-dev
+name: z3dpslicer-dev
 channels:
   - conda-forge
   - defaults
