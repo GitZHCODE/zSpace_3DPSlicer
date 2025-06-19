@@ -1,24 +1,25 @@
 # COMPAS + C++ Integration Project
 
-A minimal implementation demonstrating the integration between COMPAS (Python geometry library) and custom C++ code using nanobind for basic operations, GPU computing with gpu.cpp, and linear algebra with Eigen.
+A minimal implementation demonstrating the integration between COMPAS (Python geometry library) and custom C++ code using nanobind for basic operations, GPU computing with gpu.cpp and Dawn WebGPU, and linear algebra with Eigen.
 
 ## Project Overview
 
 This project shows how to:
 - Use nanobind to create Python bindings for C++ code
 - Integrate COMPAS geometry objects with C++ calculations
-- Perform GPU-accelerated computations using gpu.cpp
+- Perform GPU-accelerated computations using gpu.cpp and Dawn WebGPU
 - Execute fast matrix operations using Eigen
-- Set up a modern C++/Python development environment
+- Set up a modern C++/Python development environment with automatic dependency management
 
 ## Features
 
 - **Fast C++ operations** using nanobind
-- **GPU computing** using gpu.cpp for vector operations
+- **GPU computing** using gpu.cpp with Dawn WebGPU implementation for cross-platform GPU operations
 - **Eigen integration** for matrix operations and linear algebra
 - **COMPAS integration** for Python-side geometry handling
 - **Performance benchmarks** comparing CPU vs GPU operations
 - **Simple examples** showing all libraries working together
+- **Automatic dependency management** - downloads Eigen, gpu.cpp, and Dawn binaries during build
 
 ## Requirements
 
@@ -27,6 +28,9 @@ This project shows how to:
 - CMake 3.15+
 - COMPAS 2.0+
 - GPU with WebGPU support (for GPU operations)
+- Windows: Visual Studio 2019+ or MinGW-w64
+- macOS: Xcode Command Line Tools
+- Linux: GCC 9+ or Clang 10+
 
 ## Installation
 
@@ -47,10 +51,13 @@ This project shows how to:
    pip install -e .
    ```
 
-   This will:
-   - Download Eigen and gpu.cpp (if not present)
+   This will automatically:
+   - Download Eigen 3.4.0 (header-only library)
+   - Download gpu.cpp 0.1.0 (GPU computing library)
+   - Download Dawn WebGPU binaries for your platform (Windows/macOS/Linux)
    - Build the C++ extensions using nanobind
    - Install the package in development mode
+   - Copy all necessary runtime files to the correct locations
 
 ## Project Structure
 
@@ -58,15 +65,22 @@ This project shows how to:
 zspace_3DPSlicer/
 ├── src/
 │   ├── z3DPSlicer/
-│   │   └── __init__.py          # Main Python package
+│   │   ├── __init__.py          # Main Python package
+│   │   ├── _primitives.pyd      # Basic C++ operations
+│   │   ├── _gpu_ops.pyd         # GPU operations using gpu.cpp
+│   │   ├── _eigen_ops.pyd       # Eigen matrix operations
+│   │   └── dawn.dll             # Dawn WebGPU runtime (Windows)
 │   ├── compas.h                 # Precompiled header
 │   ├── primitives.cpp           # Basic C++ operations
 │   ├── gpu_ops.cpp             # GPU operations using gpu.cpp
 │   └── eigen_ops.cpp           # Eigen matrix operations
+├── external/                    # External dependencies (auto-downloaded)
+│   ├── eigen/                   # Eigen headers
+│   ├── gpu.cpp/                 # gpu.cpp library
+│   └── dawn/                    # Dawn WebGPU binaries
 ├── examples/
 │   ├── basic_example.py         # Simple demo
 │   └── gpu_eigen_example.py     # GPU and Eigen demo
-├── external/                    # External dependencies (Eigen, gpu.cpp)
 ├── CMakeLists.txt              # CMake configuration
 ├── pyproject.toml              # Python package configuration
 └── requirements.txt            # Python dependencies

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Simplified GPU and Eigen operations example demonstrating:
+GPU and Eigen operations example demonstrating:
 1. GPU availability check and device info
-2. Simple matrix multiplication using Eigen
-3. Basic availability check
+2. GPU matrix multiplication vs Eigen matrix multiplication
+3. Performance comparison between GPU and CPU operations
 """
 
 import sys
@@ -51,65 +51,112 @@ def demo_gpu_availability():
         print("✓ GPU operations are available")
     else:
         print("✗ GPU operations are not available")
-        print("Note: This is expected since we're using CPU-based Eigen operations")
+        print("Note: Will fallback to CPU-based Eigen operations")
 
 def demo_matrix_multiplication():
-    """Demonstrate matrix multiplication using Eigen."""
+    """Demonstrate matrix multiplication using GPU and Eigen."""
     print("\n" + "="*60)
-    print("MATRIX MULTIPLICATION USING EIGEN")
+    print("MATRIX MULTIPLICATION COMPARISON")
     print("="*60)
     
     # Create test matrices
     print("Creating test matrices...")
     matrix_a = [
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0],
-        [7.0, 8.0, 9.0]
+        [1.0, 2.0, 3.0, 4.0],
+        [5.0, 6.0, 7.0, 8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0]
     ]
     
     matrix_b = [
-        [9.0, 8.0, 7.0],
-        [6.0, 5.0, 4.0],
-        [3.0, 2.0, 1.0]
+        [16.0, 15.0, 14.0, 13.0],
+        [12.0, 11.0, 10.0, 9.0],
+        [8.0, 7.0, 6.0, 5.0],
+        [4.0, 3.0, 2.0, 1.0]
     ]
     
-    print(f"Matrix A:\n{matrix_a}")
-    print(f"Matrix B:\n{matrix_b}")
+    print(f"Matrix A (4x4):\n{matrix_a}")
+    print(f"Matrix B (4x4):\n{matrix_b}")
     
-    # Test matrix multiplication from _eigen_ops module
-    print("\nPerforming matrix multiplication using _eigen_ops...")
-    result_eigen = ppc.eigen_matrix_multiply(matrix_a, matrix_b)
-    print(f"Result (A × B) from _eigen_ops:\n{result_eigen}")
+    # Test Eigen-only matrix multiplication
+    print("\nPerforming matrix multiplication using Eigen only...")
+    try:
+        result_eigen = ppc.eigen_matrix_multiply_fallback(matrix_a, matrix_b)
+        print(f"Result (A × B) from Eigen:\n{result_eigen}")
+    except Exception as e:
+        print(f"✗ Eigen multiplication failed: {e}")
     
-    # Test matrix multiplication from _gpu_ops module
-    print("\nPerforming matrix multiplication using _gpu_ops...")
-    result_gpu = ppc.gpu_eigen_matrix_multiply(matrix_a, matrix_b)
-    print(f"Result (A × B) from _gpu_ops:\n{result_gpu}")
+    # Test GPU matrix multiplication
+    print("\nPerforming matrix multiplication using GPU...")
+    try:
+        result_gpu = ppc.gpu_matrix_multiply(matrix_a, matrix_b)
+        print(f"Result (A × B) from GPU:\n{result_gpu}")
+    except Exception as e:
+        print(f"✗ GPU multiplication failed: {e}")
     
-    # Verify results match
-    print(f"\nResults match: {result_eigen == result_gpu}")
+    # Test hybrid approach (GPU with Eigen fallback)
+    print("\nPerforming matrix multiplication using GPU with Eigen fallback...")
+    try:
+        result_hybrid = ppc.gpu_eigen_matrix_multiply(matrix_a, matrix_b)
+        print(f"Result (A × B) from hybrid approach:\n{result_hybrid}")
+    except Exception as e:
+        print(f"✗ Hybrid multiplication failed: {e}")
+    
+    # Verify results match (if all succeeded)
+    try:
+        eigen_hybrid_match = result_eigen == result_hybrid
+        print(f"\nEigen vs Hybrid results match: {eigen_hybrid_match}")
+        
+        if 'result_gpu' in locals():
+            gpu_hybrid_match = result_gpu == result_hybrid
+            print(f"GPU vs Hybrid results match: {gpu_hybrid_match}")
+    except:
+        print("Could not compare results due to errors")
     
     # Performance comparison
     print("\nPerformance comparison...")
     
-    # Time _eigen_ops multiplication
-    start_time = time.time()
-    for _ in range(1000):
-        ppc.eigen_matrix_multiply(matrix_a, matrix_b)
-    eigen_time = time.time() - start_time
+    # Time Eigen-only multiplication
+    try:
+        start_time = time.time()
+        for _ in range(1000):
+            ppc.eigen_matrix_multiply_fallback(matrix_a, matrix_b)
+        eigen_time = time.time() - start_time
+        print(f"Eigen-only time (1000 iterations): {eigen_time:.4f} seconds")
+    except Exception as e:
+        print(f"✗ Eigen performance test failed: {e}")
+        eigen_time = 0
     
-    # Time _gpu_ops multiplication
-    start_time = time.time()
-    for _ in range(1000):
-        ppc.gpu_eigen_matrix_multiply(matrix_a, matrix_b)
-    gpu_time = time.time() - start_time
+    # Time GPU multiplication
+    try:
+        start_time = time.time()
+        for _ in range(1000):
+            ppc.gpu_matrix_multiply(matrix_a, matrix_b)
+        gpu_time = time.time() - start_time
+        print(f"GPU-only time (1000 iterations): {gpu_time:.4f} seconds")
+    except Exception as e:
+        print(f"✗ GPU performance test failed: {e}")
+        gpu_time = 0
     
-    print(f"_eigen_ops time (1000 iterations): {eigen_time:.4f} seconds")
-    print(f"_gpu_ops time (1000 iterations): {gpu_time:.4f} seconds")
+    # Time hybrid approach
+    try:
+        start_time = time.time()
+        for _ in range(1000):
+            ppc.gpu_eigen_matrix_multiply(matrix_a, matrix_b)
+        hybrid_time = time.time() - start_time
+        print(f"Hybrid approach time (1000 iterations): {hybrid_time:.4f} seconds")
+    except Exception as e:
+        print(f"✗ Hybrid performance test failed: {e}")
+        hybrid_time = 0
     
-    if gpu_time > 0:
+    # Calculate speedups
+    if eigen_time > 0 and gpu_time > 0:
         speedup = eigen_time / gpu_time
-        print(f"Speedup: {speedup:.2f}x")
+        print(f"GPU speedup over Eigen: {speedup:.2f}x")
+    
+    if eigen_time > 0 and hybrid_time > 0:
+        speedup = eigen_time / hybrid_time
+        print(f"Hybrid speedup over Eigen: {speedup:.2f}x")
 
 def demo_availability_check():
     """Demonstrate simple availability check."""
@@ -148,16 +195,23 @@ def demo_availability_check():
     except Exception as e:
         print(f"✗ add function failed: {e}")
     
-    # Test matrix multiplication
+    # Test Eigen matrix multiplication
     try:
         a = [[1.0, 2.0], [3.0, 4.0]]
         b = [[5.0, 6.0], [7.0, 8.0]]
-        result = ppc.eigen_matrix_multiply(a, b)
-        print(f"✓ eigen_matrix_multiply works: {result}")
+        result = ppc.eigen_matrix_multiply_fallback(a, b)
+        print(f"✓ eigen_matrix_multiply_fallback works: {result}")
     except Exception as e:
-        print(f"✗ eigen_matrix_multiply failed: {e}")
+        print(f"✗ eigen_matrix_multiply_fallback failed: {e}")
     
-    # Test GPU module matrix multiplication
+    # Test GPU matrix multiplication
+    try:
+        result = ppc.gpu_matrix_multiply(a, b)
+        print(f"✓ gpu_matrix_multiply works: {result}")
+    except Exception as e:
+        print(f"✗ gpu_matrix_multiply failed: {e}")
+    
+    # Test hybrid approach
     try:
         result = ppc.gpu_eigen_matrix_multiply(a, b)
         print(f"✓ gpu_eigen_matrix_multiply works: {result}")
@@ -186,8 +240,8 @@ def demo_compas_integration():
     
     # Use matrix multiplication with COMPAS data
     try:
-        result = ppc.eigen_matrix_multiply(point_matrix, vector_matrix)
-        print(f"Matrix multiplication result: {result}")
+        result = ppc.eigen_matrix_multiply_fallback(point_matrix, vector_matrix)
+        print(f"Matrix multiplication result (Eigen): {result}")
         
         # This should give us the dot product
         dot_product = result[0][0]
@@ -197,7 +251,7 @@ def demo_compas_integration():
 
 def main():
     """Run all demonstrations."""
-    print("Simplified GPU + Eigen Operations Demo")
+    print("GPU + Eigen Operations Demo")
     print("="*60)
     
     try:

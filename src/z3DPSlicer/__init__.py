@@ -13,10 +13,11 @@ try:
     # Import functions from primitives
     from ._primitives import add
     
-    # Import functions from simplified GPU operations (now just Eigen)
+    # Import functions from GPU operations
     from ._gpu_ops import (
         is_gpu_available, get_gpu_info,
-        eigen_matrix_multiply as gpu_eigen_matrix_multiply
+        eigen_matrix_multiply as gpu_eigen_matrix_multiply,
+        gpu_matrix_multiply, eigen_matrix_multiply_fallback
     )
     
     # Import functions from Eigen operations
@@ -40,6 +41,12 @@ except ImportError as e:
         return "GPU not available - C++ extensions not built"
     
     def gpu_eigen_matrix_multiply(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def gpu_matrix_multiply(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_matrix_multiply_fallback(a, b):
         raise ImportError("C++ extensions not built. Run: pip install -e .")
     
     def eigen_matrix_multiply(a, b):
@@ -76,6 +83,9 @@ __all__ = [
     
     # GPU availability
     "is_gpu_available", "get_gpu_info",
+    
+    # GPU operations
+    "gpu_matrix_multiply", "eigen_matrix_multiply_fallback",
     
     # Eigen operations (from both modules)
     "eigen_matrix_multiply", "eigen_matrix_transpose", "eigen_matrix_determinant",
