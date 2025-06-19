@@ -9,10 +9,16 @@ local_path = "C:/Users/Wo.Lin/source/repos/zspace_alice/EXE/data/IN/blockJson/bl
 zblock = ZBlock()
 zblock.from_zjson(local_path)
 mesh = zblock.mesh
+startPlane = zblock.startPlane
+endPlane = zblock.endPlane
 viewer = Viewer()
 viewer.scene.add(mesh)
+viewer.scene.add(startPlane)
+viewer.scene.add(endPlane)
 viewer.show()
 
+
+# zblock.read_start_end_planes(local_path)
 
 # setup viewer
 

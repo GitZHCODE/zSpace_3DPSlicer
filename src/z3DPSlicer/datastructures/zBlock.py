@@ -1,7 +1,7 @@
 ####zBlock implementation using compas data with mesh and add on attributes set from zJson####
 from compas.data import Data
 from compas.datastructures import Mesh
-from compas.geometry import Point, Frame, Plane , Transformation
+from compas.geometry import Point, Frame, Plane , Vector
 import json
 
 
@@ -13,9 +13,8 @@ class ZBlock(Data):
         # you should write the following:
         # super(SomeThing, self).__init__()
         self.mesh = Mesh()
-        self.startPlane = Plane()
-        self.endPlane = Plane()
-
+        self.startPlane = None
+        self.endPlane = None
     
     def from_zjson(self, filePath):
             """Load mesh data from a JSON created by zSpace and return a ZBlock instance.
@@ -33,6 +32,7 @@ class ZBlock(Data):
                 An instance of ZBlock with mesh data loaded from the JSON.
             """
             self.read_mesh_from_zJSON(filePath)
+            self.read_start_end_planes(filePath)
 
 
 
@@ -115,3 +115,43 @@ class ZBlock(Data):
             print(f"Vertices found: {len(vertices)}, Faces found: {len(faces)}")
             self.mesh = Mesh()
             
+
+
+    def read_start_end_planes(self, filePath):
+       
+        """Load start and end planes from a JSON created by zSpace.
+        
+        Parameters
+        ----------
+        filePath : str
+            Path to the JSON file created by zSpace.
+        """
+        
+        with open(filePath, 'r') as file:
+            data = json.load(file)
+        
+        if "LeftPlanes" in data:
+            ###plane location in viewer is in correct for some reason, using frmae instead
+            if len(data["LeftPlanes"]) == 2 :
+                start_planes_data = data["LeftPlanes"][0]
+                # print(f"Start plane data: {start_planes_data}")
+                basePt_start = Point(start_planes_data[3], start_planes_data[7], start_planes_data[11])
+                normal_start_0 = Vector(start_planes_data[0], start_planes_data[4], start_planes_data[8])
+                normal_start_1 = Vector(start_planes_data[1], start_planes_data[5], start_planes_data[9])
+                self.startPlane = Frame(basePt_start, normal_start_0, normal_start_1)
+
+
+                end_planes_data = data["LeftPlanes"][1]
+                # print(f"End plane data: {end_planes_data}")
+                basePt_end = Point(end_planes_data[3], end_planes_data[7], end_planes_data[11])
+                normal_end_0 = Vector(end_planes_data[0], end_planes_data[4], end_planes_data[8])
+                normal_end_1 = Vector(end_planes_data[1], end_planes_data[5], end_planes_data[9])
+                self.endPlane = Frame(basePt_end, normal_end_0, normal_end_1)
+
+            else:
+                print("Warning: LeftPlanes does not contain exactly two planes.")
+                self.startPlane = None
+                self.endPlane = None
+
+
+
