@@ -98,6 +98,9 @@ find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development.Module Devel
 find_package(nanobind CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+# Get Python executable directory for DLL copying
+get_filename_component(PYTHON_EXECUTABLE_DIR ${Python_EXECUTABLE} DIRECTORY)
+
 # Add include directories
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -140,11 +143,14 @@ function(add_nanobind_extension name source)
       target_link_libraries(${name} PRIVATE "${DAWN_DIR}/lib/dawn.lib")
       add_custom_command(TARGET ${name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${DAWN_DIR}/../dawn/bin/dawn.dll"
+        "${DAWN_DIR}/bin/dawn.dll"
         $<TARGET_FILE_DIR:${name}>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${DAWN_DIR}/../dawn/bin/dawn.dll"
+        "${DAWN_DIR}/bin/dawn.dll"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/z3DPSlicer/"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${DAWN_DIR}/bin/dawn.dll"
+        "${PYTHON_EXECUTABLE_DIR}"
       )
     elseif(APPLE)
       add_custom_command(TARGET ${name} POST_BUILD
@@ -185,4 +191,6 @@ message(STATUS "GPU.cpp Include Dir: ${GPU_CPP_DIR}")
 message(STATUS "GPU.cpp Third Party Dir: ${GPU_CPP_THIRD_PARTY_DIR}")
 message(STATUS "Dawn Dir: ${DAWN_DIR}")
 message(STATUS "Dawn Lib Dir: ${DAWN_LIB_DIR}")
+message(STATUS "Python Executable: ${Python_EXECUTABLE}")
+message(STATUS "Python Executable Dir: ${PYTHON_EXECUTABLE_DIR}")
 message(STATUS "=======================================")

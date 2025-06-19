@@ -36,9 +36,18 @@ std::string get_gpu_info() {
     }
     
     try {
-        // Note: gpu.cpp doesn't expose adapter name directly in the public API
-        // We'll return a generic message for now
-        return "GPU: WebGPU-compatible device (gpu.cpp)";
+        // Get adapter info using WebGPU API
+        WGPUAdapterInfo adapterInfo = WGPU_ADAPTER_INFO_INIT;
+        WGPUStatus status = wgpuAdapterGetInfo(g_gpu_context->adapter, &adapterInfo);
+        
+        if (status == WGPUStatus_Success) {
+            std::string description = adapterInfo.description ? adapterInfo.description : "Unknown GPU";
+            // Free the adapter info
+            wgpuAdapterInfoFreeMembers(adapterInfo);
+            return description;
+        } else {
+            return "Unknown GPU";
+        }
     } catch (const std::exception& e) {
         return "GPU info not available: " + std::string(e.what());
     }
