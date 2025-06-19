@@ -1,10 +1,19 @@
 # import slicer from compas_slicer
 import compas
-from compas.datastructures import Mesh
-# from z3DPSlicer.datastructures import Slicer
+#from compas.datastructures import Mesh
+#from z3DPSlicer import CompasMesh as Mesh
+from z3DPSlicer.datastructures.zBlock import ZBlock
 from compas_viewer import Viewer
 
-mesh = Mesh.from_json
+local_path = "C:/Users/Wo.Lin/source/repos/zspace_alice/EXE/data/IN/blockJson/blockMesh_0.json"
+zblock = ZBlock()
+zblock.from_zjson(local_path)
+mesh = zblock.mesh
+viewer = Viewer()
+viewer.scene.add(mesh)
+viewer.show()
+
+
 # setup viewer
 
 # import block

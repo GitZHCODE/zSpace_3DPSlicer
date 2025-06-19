@@ -3,6 +3,7 @@ z3DPSlicer - A minimal C++/Python project using nanobind and COMPAS
 """
 
 __version__ = "0.1.0"
+from .datastructures.zBlock import ZBlock
 
 # Import C++ extensions
 try:
@@ -27,5 +28,5 @@ except ImportError:
 
 # Re-export useful functions
 __all__ = [
-    "add"
+    "add",
 ] 
