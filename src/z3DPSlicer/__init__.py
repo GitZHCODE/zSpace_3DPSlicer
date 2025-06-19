@@ -7,13 +7,57 @@ __version__ = "0.1.0"
 # Import C++ extensions
 try:
     from . import _primitives
-    # Import the add function directly
+    from . import _gpu_ops
+    from . import _eigen_ops
+    
+    # Import functions from primitives
     from ._primitives import add
+    
+    # Import functions from simplified GPU operations (now just Eigen)
+    from ._gpu_ops import (
+        is_gpu_available, get_gpu_info,
+        eigen_matrix_multiply as gpu_eigen_matrix_multiply
+    )
+    
+    # Import functions from Eigen operations
+    from ._eigen_ops import (
+        eigen_matrix_multiply, eigen_matrix_transpose, eigen_matrix_determinant,
+        eigen_identity_matrix, eigen_dot_product, eigen_cross_product
+    )
+    
 except ImportError as e:
     print(f"Warning: C++ extensions not available: {e}")
     print("Make sure to build the extensions with: pip install -e .")
-    # Define a fallback function
+    
+    # Define fallback functions
     def add(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def is_gpu_available():
+        return False
+    
+    def get_gpu_info():
+        return "GPU not available - C++ extensions not built"
+    
+    def gpu_eigen_matrix_multiply(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_matrix_multiply(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_matrix_transpose(matrix):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_matrix_determinant(matrix):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_identity_matrix(size):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_dot_product(a, b):
+        raise ImportError("C++ extensions not built. Run: pip install -e .")
+    
+    def eigen_cross_product(a, b):
         raise ImportError("C++ extensions not built. Run: pip install -e .")
 
 # Import COMPAS for Python-side functionality
@@ -27,5 +71,16 @@ except ImportError:
 
 # Re-export useful functions
 __all__ = [
-    "add"
+    # Basic operations
+    "add",
+    
+    # GPU availability
+    "is_gpu_available", "get_gpu_info",
+    
+    # Eigen operations (from both modules)
+    "eigen_matrix_multiply", "eigen_matrix_transpose", "eigen_matrix_determinant",
+    "eigen_identity_matrix", "eigen_dot_product", "eigen_cross_product",
+    
+    # GPU module Eigen operations (for testing)
+    "gpu_eigen_matrix_multiply"
 ] 
