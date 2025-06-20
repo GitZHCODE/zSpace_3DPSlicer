@@ -95,10 +95,7 @@ def main():
     print("  python examples/basic_example.py")
     print("\nOr import the package in Python:")
     print("  import z3DPSlicer as ppc")
-    import z3DPSlicer as ppc
     print("  result = ppc.add(5, 3)")
-    result = ppc.add(5, 3)
-    print(f"  result = {result}")
 
 if __name__ == "__main__":
     main() 

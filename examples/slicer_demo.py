@@ -157,8 +157,10 @@ slicer.set_mesh(mesh)
 
 viewer = Viewer()
 viewer.scene.add(mesh)
-viewer.scene.add(startPlane)
-viewer.scene.add(startPlane.point)
-viewer.scene.add(endPlane)
-viewer.scene.add(endPlane.point)
+if startPlane is not None:
+    viewer.scene.add(startPlane)
+    viewer.scene.add(startPlane.point)
+if endPlane is not None:
+    viewer.scene.add(endPlane)
+    viewer.scene.add(endPlane.point)
 viewer.show()

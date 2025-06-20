@@ -41,6 +41,9 @@ find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development.Module Devel
 find_package(nanobind CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+# Get Python executable directory for DLL copying
+get_filename_component(PYTHON_EXECUTABLE_DIR ${Python_EXECUTABLE} DIRECTORY)
+
 # Add include directories
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -69,15 +72,29 @@ function(add_nanobind_extension name source)
   # Add dependencies
   add_dependencies(${name} external_downloads)
   
+  # Link libraries
+  target_link_libraries(${name} PRIVATE Threads::Threads)
+  
   # Install the module
   install(TARGETS ${name} LIBRARY DESTINATION z3DPSlicer)
+  
+  # Copy the built module to the Python package directory for development
+  add_custom_command(TARGET ${name} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:${name}>
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/z3DPSlicer/"
+  )
 endfunction()
 
 # Create individual extension modules for each C++ file
 add_nanobind_extension(_primitives src/primitives.cpp)
+add_nanobind_extension(_test_slicer src/test_slicer.cpp)
+add_nanobind_extension(_slicer src/zSlicer.cpp src/slicer.cpp)
 
 message(STATUS "============= Build Configuration =============")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ Standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "Eigen Include Dir: ${EIGEN_INCLUDE_DIR}")
+message(STATUS "Python Executable: ${Python_EXECUTABLE}")
+message(STATUS "Python Executable Dir: ${PYTHON_EXECUTABLE_DIR}")
 message(STATUS "=======================================")
