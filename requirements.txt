@@ -1,2 +1,1 @@
-compas >= 2.20
-compas_viewer >= 2.13
+compas >= 2
