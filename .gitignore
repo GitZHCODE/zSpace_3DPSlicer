@@ -1,6 +1,9 @@
 /.vscode
 /build
 /dist
+/data
+/external
+
 *.pyd
 *.dll
 *.so
