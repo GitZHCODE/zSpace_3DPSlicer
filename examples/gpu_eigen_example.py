@@ -27,7 +27,7 @@ else:
 
 print(f"GPU Available: {gpu_available}")
 
-# Test with 1024x1024 random matrices
+# Test with 512x512 random matrices
 size = 2048
 a = np.random.rand(size, size).astype(np.float32)
 b = np.random.rand(size, size).astype(np.float32)
@@ -36,14 +36,23 @@ b = np.random.rand(size, size).astype(np.float32)
 a_list = a.tolist()
 b_list = b.tolist()
 
-# GPU (with fallback) multiplication
-t0 = time.time()
-result_gpu = ppc.eigen_matrix_multiply(a_list, b_list)
-t1 = time.time()
-print(f"GPU method time taken: {t1-t0:.4f} seconds")
-
 # Eigen (CPU) only multiplication
+print("Running Eigen method...")
 t0 = time.time()
 result_cpu = ppc.eigen_matrix_multiply_fallback(a_list, b_list)
 t1 = time.time()
 print(f"Eigen (CPU) method time taken: {t1-t0:.4f} seconds") 
+
+# GPU multiplication
+print("Running Eigen (GPU) method...")
+t0 = time.time()
+result_gpu = ppc.eigen_matrix_multiply(a_list, b_list)
+t1 = time.time()
+print(f"Eigen (GPU) method time taken: {t1-t0:.4f} seconds")
+
+# GPU multiplication
+print("Running GPU method...")
+t0 = time.time()
+result_gpu = ppc.gpu_matrix_multiply(a_list, b_list)
+t1 = time.time()
+print(f"GPU method time taken: {t1-t0:.4f} seconds")

@@ -56,31 +56,44 @@ std::string get_gpu_info() {
     }
 }
 
-// GPU matrix multiplication using gpu.cpp
+// GPU matrix multiplication using gpu.cpp - minimal implementation
 std::vector<std::vector<float>> gpu_matrix_multiply(
     const std::vector<std::vector<float>>& a,
     const std::vector<std::vector<float>>& b) {
+    
     if (!is_gpu_available()) {
         throw std::runtime_error("GPU not available for matrix multiplication");
     }
+    
     if (a.empty() || b.empty() || a[0].empty() || b[0].empty()) {
         throw std::invalid_argument("Matrices cannot be empty");
     }
+    
     if (a[0].size() != b.size()) {
         throw std::invalid_argument("Matrix dimensions do not match for multiplication");
     }
-    int M = static_cast<int>(a.size());      // rows of A
-    int K = static_cast<int>(a[0].size());   // cols of A / rows of B
-    int N = static_cast<int>(b[0].size());   // cols of B
+    
+    size_t M = a.size();      // rows of A
+    size_t K = a[0].size();   // cols of A / rows of B
+    size_t N = b[0].size();   // cols of B
+    
+    // Flatten matrices to 1D arrays
     std::vector<float> flat_a;
     std::vector<float> flat_b;
-    for (const auto& row : a) flat_a.insert(flat_a.end(), row.begin(), row.end());
-    for (const auto& row : b) flat_b.insert(flat_b.end(), row.begin(), row.end());
-    Tensor tensor_a = createTensor(*g_gpu_context, Shape{static_cast<size_t>(M), static_cast<size_t>(K)}, kf32, flat_a.data());
-    Tensor tensor_b = createTensor(*g_gpu_context, Shape{static_cast<size_t>(K), static_cast<size_t>(N)}, kf32, flat_b.data());
-    Tensor result_tensor = createTensor(*g_gpu_context, Shape{static_cast<size_t>(M), static_cast<size_t>(N)}, kf32);
-    // Updated kernel for arbitrary sizes
-    const char* kernel_code = R"(
+    for (const auto& row : a) {
+        flat_a.insert(flat_a.end(), row.begin(), row.end());
+    }
+    for (const auto& row : b) {
+        flat_b.insert(flat_b.end(), row.begin(), row.end());
+    }
+    
+    // Create tensors
+    Tensor tensor_a = createTensor(*g_gpu_context, Shape{M, K}, kf32, flat_a.data());
+    Tensor tensor_b = createTensor(*g_gpu_context, Shape{K, N}, kf32, flat_b.data());
+    Tensor result_tensor = createTensor(*g_gpu_context, Shape{M, N}, kf32);
+    
+    // Simple naive matrix multiplication kernel
+    std::string kernel_code = R"(
 @group(0) @binding(0) var<storage, read> A: array<f32>;
 @group(0) @binding(1) var<storage, read> B: array<f32>;
 @group(0) @binding(2) var<storage, read_write> C: array<f32>;
@@ -88,37 +101,43 @@ std::vector<std::vector<float>> gpu_matrix_multiply(
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     let row = global_id.x;
     let col = global_id.y;
-    let M = " + std::to_string(M) + R"u;
-    let N = " + std::to_string(N) + R"u;
-    let K = " + std::to_string(K) + R"u;
-    if (row >= M || col >= N) {
+    
+    if (row >= )" + std::to_string(M) + R"(u || col >= )" + std::to_string(N) + R"(u) {
         return;
     }
+    
     var total: f32 = 0.0;
-    for (var k = 0u; k < K; k = k + 1u) {
-        total += A[row * K + k] * B[k * N + col];
+    for (var k = 0u; k < )" + std::to_string(K) + R"(u; k = k + 1u) {
+        total += A[row * )" + std::to_string(K) + R"(u + k] * B[k * )" + std::to_string(N) + R"(u + col];
     }
-    C[row * N + col] = total;
+    C[row * )" + std::to_string(N) + R"(u + col] = total;
 }
 )";
-    // Compose kernel code with actual sizes
-    std::string kernel_code_str(kernel_code);
-    KernelCode kernel_code_obj = {kernel_code_str, Shape{16, 16, 1}};
+    
+    // Create kernel
+    KernelCode kernel_code_obj = {kernel_code, Shape{16, 16, 1}};
     Kernel kernel = createKernel(*g_gpu_context, kernel_code_obj, 
                                 Bindings{tensor_a, tensor_b, result_tensor},
-                                cdiv(Shape{static_cast<size_t>(M), static_cast<size_t>(N), 1}, Shape{16, 16, 1}));
+                                cdiv(Shape{M, N, 1}, Shape{16, 16, 1}));
+    
+    // Dispatch and wait
     std::promise<void> promise;
     std::future<void> future = promise.get_future();
     dispatchKernel(*g_gpu_context, kernel, promise);
     wait(*g_gpu_context, future);
+    
+    // Copy result back to CPU
     std::vector<float> result_vector(M * N);
     toCPU(*g_gpu_context, result_tensor, result_vector.data(), result_vector.size() * sizeof(float));
+    
+    // Convert back to 2D matrix
     std::vector<std::vector<float>> output(M, std::vector<float>(N));
-    for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < N; ++j) {
+    for (size_t i = 0; i < M; ++i) {
+        for (size_t j = 0; j < N; ++j) {
             output[i][j] = result_vector[i * N + j];
         }
     }
+    
     return output;
 }
 

@@ -107,6 +107,7 @@ include_directories(
   ${EIGEN_INCLUDE_DIR}
   ${GPU_CPP_DIR}
   ${GPU_CPP_THIRD_PARTY_DIR}
+  ${DAWN_DIR}/include
 )
 
 # Define a function to add a nanobind module with common settings
@@ -137,7 +138,7 @@ function(add_nanobind_extension name source)
   target_link_libraries(${name} PRIVATE Threads::Threads)
   
   # For GPU operations, we need to ensure Dawn DLL is available at runtime
-  if(${name} STREQUAL "_gpu_ops")
+  if(${name} STREQUAL "_gpu_ops" OR ${name} STREQUAL "_webgpu_ops")
     # Link against dawn.lib on Windows and copy dawn.dll to output
     if(WIN32)
       target_link_libraries(${name} PRIVATE "${DAWN_DIR}/lib/dawn.lib")
