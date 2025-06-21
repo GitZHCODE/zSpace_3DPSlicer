@@ -34,26 +34,24 @@ class zMesh:
         return distances
 
     def compute_geodesic_contours(self, source_vertex_id, steps=10, dist=0.0):
-        max_safe_steps = 50
-        if steps > max_safe_steps:
-            steps = max_safe_steps
+        """Compute geodesic contours and return zGraph objects."""
         source_vertices = np.array([source_vertex_id], dtype=np.int32)
         try:
             contours, count = self.zmesh.compute_geodesic_contours(source_vertices, steps, dist)
             if count == 0:
                 return []
-            contour_lines = []
+            contour_graphs = []
             batch_size = 5
             for batch_start in range(0, count, batch_size):
                 batch_end = min(batch_start + batch_size, count)
                 for i in range(batch_start, batch_end):
                     try:
                         graph = zGraph(contours[i])
-                        contour_lines.extend(graph.to_compas_lines())
+                        contour_graphs.append(graph)
                     except Exception:
                         continue
                 import gc
                 gc.collect()
-            return contour_lines
+            return contour_graphs
         except Exception:
             return [] 

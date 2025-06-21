@@ -11,11 +11,8 @@ option(ENABLE_PRECOMPILED_HEADERS "Enable precompiled headers for the build" ON)
 # External dependencies
 include(ExternalProject)
 
-# Setup Eigen (header-only library)
-set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
-set(EIGEN_INCLUDE_DIR "${EXTERNAL_DIR}/eigen")
-
 # Setup zSpace
+set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 set(ZSPACE_DIR "${EXTERNAL_DIR}/zspace")
 set(ZSPACE_INCLUDE_DIR "${ZSPACE_DIR}")
 set(ZSPACE_LIB_DIR "${ZSPACE_DIR}")
@@ -28,13 +25,13 @@ endif()
 # Create external downloads target
 add_custom_target(external_downloads ALL)
 
-# Download Eigen if not already present
-if(NOT EXISTS "${EIGEN_INCLUDE_DIR}")
-  message(STATUS "Downloading Eigen...")
+# Download zSpace if not already present
+if(NOT EXISTS "${ZSPACE_DIR}")
+  message(STATUS "Downloading zSpace...")
   ExternalProject_Add(
-      eigen_download
-      URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip
-      SOURCE_DIR "${EIGEN_INCLUDE_DIR}"
+      zspace_download
+      URL https://github.com/GitZHCODE/zspace_external/releases/download/v0.1-beta.1/zspace_external_win64.zip
+      SOURCE_DIR "${ZSPACE_DIR}"
       CONFIGURE_COMMAND ""
       BUILD_COMMAND ""
       INSTALL_COMMAND ""
@@ -43,7 +40,7 @@ if(NOT EXISTS "${EIGEN_INCLUDE_DIR}")
       PATCH_COMMAND ""
       TLS_VERIFY ON
   )
-  add_dependencies(external_downloads eigen_download)
+  add_dependencies(external_downloads zspace_download)
 endif()
 
 # Find Python and nanobind
@@ -55,7 +52,6 @@ find_package(Threads REQUIRED)
 # Add include directories
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${EIGEN_INCLUDE_DIR}
   ${ZSPACE_INCLUDE_DIR}
 )
 
@@ -74,12 +70,11 @@ function(add_nanobind_extension name source)
   # Include directories
   target_include_directories(${name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${EIGEN_INCLUDE_DIR}
     ${ZSPACE_INCLUDE_DIR}
     ${nanobind_INCLUDE_DIRS}
   )
 
-  message(   ${ZSPACE_INCLUDE_DIR})
+  message(STATUS "zSpace Include Dir: ${ZSPACE_INCLUDE_DIR}")
   
   # Add dependencies
   add_dependencies(${name} external_downloads)
@@ -137,7 +132,6 @@ add_nanobind_extension(_zspace src/zspace_bindings.cpp)
 message(STATUS "============= Build Configuration =============")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ Standard: C++${CMAKE_CXX_STANDARD}")
-message(STATUS "Eigen Include Dir: ${EIGEN_INCLUDE_DIR}")
 message(STATUS "zSpace Include Dir: ${ZSPACE_INCLUDE_DIR}")
 message(STATUS "zSpace Lib Dir: ${ZSPACE_LIB_DIR}")
 message(STATUS "=======================================")
