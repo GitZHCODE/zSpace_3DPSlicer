@@ -4,9 +4,12 @@ import compas
 #from z3DPSlicer import CompasMesh as Mesh
 from compas_viewer import Viewer
 from compas.geometry import Point, Frame, Plane , Vector
-from compas.datastructures import Mesh
+from compas.datastructures import Mesh, Network
+
+import numpy as np
+from z3DPSlicer import zMesh, zGraph, zField
 import json
-from z3DPSlicer.zSlicer import Slicer
+from compas.colors import Color
 
 
 def read_mesh_from_zJSON(filePath):
@@ -132,14 +135,28 @@ def read_start_end_planes(filePath):
         print("Warning: LeftPlanes not found in JSON data.")
         return None, None
 
-local_path = "C:/Users/taizhong_chen/Downloads/blockMesh_23.json"
-mesh = read_mesh_from_zJSON(local_path)
-startPlane, endPlane = read_start_end_planes(local_path)
+# local_path = "C:/Users/taizhong_chen/Downloads/blockMesh_23.json"
+# mesh = read_mesh_from_zJSON(local_path)
+# startPlane, endPlane = read_start_end_planes(local_path)
 
+viewer = Viewer()
+
+mesh = Mesh.from_obj("data/sliceMesh.obj")
+mesh.quads_to_triangles()
+
+zmesh = zMesh()
+zmesh.from_compas_mesh(mesh)
+
+# Try intersection at mesh center first
+zgraph = zmesh.intersect_plane([0, 0, 0.2], [0, 0, 1])
+
+if zgraph is not None and zgraph.get_vertex_count() > 0:
+    network = zGraph(zgraph).to_compas_network()
+    if network.number_of_nodes() > 0:
+        viewer.scene.add(network, linecolor=Color.black(), linewidth=2)
+        print(f"Added intersection with {network.number_of_nodes()} nodes")
 
 # setup slicer
-slicer = Slicer()
-slicer.set_mesh(mesh)
 
 # slice compute
 # slicer.sclice(start, end, step)
@@ -155,12 +172,11 @@ slicer.set_mesh(mesh)
 # exprot to json
 # contours.export("path/to/contours.json")
 
-viewer = Viewer()
-viewer.scene.add(mesh)
-if startPlane is not None:
-    viewer.scene.add(startPlane)
-    viewer.scene.add(startPlane.point)
-if endPlane is not None:
-    viewer.scene.add(endPlane)
-    viewer.scene.add(endPlane.point)
+viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False)
+# if startPlane is not None:
+#     viewer.scene.add(startPlane)
+#     viewer.scene.add(startPlane.point)
+# if endPlane is not None:
+#     viewer.scene.add(endPlane)
+#     viewer.scene.add(endPlane.point)
 viewer.show()
