@@ -110,4 +110,34 @@ class zGraph:
                     start_idx < len(vertices) and end_idx < len(vertices)):
                     network.add_edge(start_idx, end_idx)
         
-        return network 
+        return network
+
+    def transform(self, tMatrix):
+        """Transform the graph vertices using a transformation matrix.
+        
+        Parameters
+        ----------
+        tMatrix : list or numpy.ndarray
+            4x4 transformation matrix in column-major format
+            
+        Returns
+        -------
+        bool
+            True if transformation was successful, False otherwise
+        """
+        # Convert tMatrix to numpy array if it's a list
+        if isinstance(tMatrix, list):
+            tMatrix = np.array(tMatrix, dtype=np.float32)
+        elif tMatrix.dtype != np.float32:
+            tMatrix = tMatrix.astype(np.float32)
+        
+        # Ensure matrix is 1D array of 16 elements
+        if tMatrix.size != 16:
+            return False
+            
+        # Flatten if needed
+        tMatrix = tMatrix.flatten()
+        
+        # Call C++ transform method
+        return self.zgraph.transform(tMatrix) 
+    

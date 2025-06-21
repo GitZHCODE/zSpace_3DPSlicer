@@ -9,6 +9,7 @@ from compas.datastructures import Mesh, Network
 import numpy as np
 import json
 from compas.colors import Color
+from compas.colors.colormap import ColorMap
 from z3DPSlicer import zSlicer
 
 def read_mesh_from_zJSON(filePath):
@@ -144,7 +145,15 @@ viewer = Viewer()
 # Create slicer and perform slicing
 slicer = zSlicer()
 slicer.set_mesh(mesh)
+
+# init field
+slicer.init_field(startPlane, 20, 20)
+
+# slice
 slicer.slice(startPlane, endPlane, 10)
+
+# update contour
+slicer.update_contour(0, 0.002)
 
 # Add planes to viewer
 frames = slicer.get_frames()
@@ -155,6 +164,26 @@ for frame in frames:
 contours = slicer.get_contours()
 for contour in contours:
     viewer.scene.add(contour, linecolor=Color.black(), linewidth=2) 
+
+# Add field to viewer
+field = slicer.get_field()
+field_mesh = field.get_mesh().to_compas_mesh()
+
+# Test offset contour
+offset_contour = slicer.get_field().get_iso_contour(0.05)
+viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=2)
+
+# compute field color map based on values
+values = field.get_field_values()
+min_value = np.min(values)
+max_value = np.max(values)
+cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
+vertex_colors = {}
+for idx, value in enumerate(values):
+    normalized_value = (value - min_value) / (max_value - min_value)
+    vertex_colors[idx] = cmap(normalized_value)
+
+viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False)
 
 # Add mesh to viewer
 viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False)

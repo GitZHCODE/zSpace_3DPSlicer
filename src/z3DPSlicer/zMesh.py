@@ -188,3 +188,32 @@ class zMesh:
             from z3DPSlicer.zGraph import zGraph
             return zGraph(result)
         return None
+
+    def transform(self, tMatrix):
+        """Transform the mesh vertices using a transformation matrix.
+        
+        Parameters
+        ----------
+        tMatrix : list or numpy.ndarray
+            4x4 transformation matrix in column-major format
+            
+        Returns
+        -------
+        bool
+            True if transformation was successful, False otherwise
+        """
+        # Convert tMatrix to numpy array if it's a list
+        if isinstance(tMatrix, list):
+            tMatrix = np.array(tMatrix, dtype=np.float32)
+        elif tMatrix.dtype != np.float32:
+            tMatrix = tMatrix.astype(np.float32)
+        
+        # Ensure matrix is 1D array of 16 elements
+        if tMatrix.size != 16:
+            return False
+            
+        # Flatten if needed
+        tMatrix = tMatrix.flatten()
+        
+        # Call C++ transform method
+        return self.zmesh.transform(tMatrix)

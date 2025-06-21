@@ -172,6 +172,13 @@ public:
         }
         return nb::make_tuple(nb::list(), 0);
     }
+
+    bool transform(const nb::ndarray<float>& tMatrix) {
+        if (tMatrix.size() != 16) {
+            return false;  // Matrix must be 4x4 = 16 elements
+        }
+        return zext_graph_transform(handle, tMatrix.data()) == 1;
+    }
 };
 
 
@@ -390,6 +397,13 @@ public:
         }
         delete graph;
         return nullptr;
+    }
+
+    bool transform(const nb::ndarray<float>& tMatrix) {
+        if (tMatrix.size() != 16) {
+            return false;  // Matrix must be 4x4 = 16 elements
+        }
+        return zext_mesh_transform(handle, tMatrix.data()) == 1;
     }
 };
 
@@ -957,7 +971,8 @@ NB_MODULE(_zspace, m) {
         .def("compute_geodesic_contours_interpolated", &Mesh::compute_geodesic_contours_interpolated)
         .def("set_handle", &Mesh::set_handle)
         .def("get_handle", &Mesh::get_handle)
-        .def("intersect_plane", &Mesh::intersect_plane);
+        .def("intersect_plane", &Mesh::intersect_plane)
+        .def("transform", &Mesh::transform);
 
     // Graph class
     nb::class_<Graph>(m, "Graph")
@@ -971,7 +986,8 @@ NB_MODULE(_zspace, m) {
         .def("merge_vertices", &Graph::merge_vertices)
         .def("separate_graph", &Graph::separate_graph)
         .def("set_handle", &Graph::set_handle)
-        .def("get_handle", &Graph::get_handle);
+        .def("get_handle", &Graph::get_handle)
+        .def("transform", &Graph::transform);
 
     // Field class
     nb::class_<Field>(m, "Field")
