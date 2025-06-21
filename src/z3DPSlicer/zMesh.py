@@ -162,18 +162,10 @@ class zMesh:
         poly_counts = np.ascontiguousarray(np.array([len(face) for face in faces], dtype=np.int32))
         poly_connections = np.ascontiguousarray(np.array([vertex for face in faces for vertex in face], dtype=np.int32))
         
-        # Debug: Print mesh data
-        print(f"Converting COMPAS mesh to zSpace mesh:")
-        print(f"  Vertices: {len(vertices)} points, dtype={vertices.dtype}, shape={vertices.shape}, contiguous={vertices.flags['C_CONTIGUOUS']}")
-        print(f"  Faces: {len(faces)} faces")
-        print(f"  Poly counts: {poly_counts}, dtype={poly_counts.dtype}, shape={poly_counts.shape}, contiguous={poly_counts.flags['C_CONTIGUOUS']}")
-        print(f"  Poly connections: {len(poly_connections)} indices, dtype={poly_connections.dtype}, shape={poly_connections.shape}, contiguous={poly_connections.flags['C_CONTIGUOUS']}")
-        
         # Check if vertices are within reasonable bounds
         if len(vertices) > 0:
             min_coords = np.min(vertices, axis=0)
             max_coords = np.max(vertices, axis=0)
-            print(f"  Vertex bounds: X[{min_coords[0]:.3f}, {max_coords[0]:.3f}], Y[{min_coords[1]:.3f}, {max_coords[1]:.3f}], Z[{min_coords[2]:.3f}, {max_coords[2]:.3f}]")
         
         self.zmesh = ZSpaceMesh()
         success = self.zmesh.create_mesh(vertices, poly_counts, poly_connections)
@@ -191,5 +183,8 @@ class zMesh:
         """Intersect mesh with a plane and return a zGraph if successful, else None."""
         origin_array = np.array(origin, dtype=np.float32)
         normal_array = np.array(normal, dtype=np.float32)
-        graph = self.zmesh.intersect_plane(origin_array, normal_array)
-        return graph
+        result = self.zmesh.intersect_plane(origin_array, normal_array)
+        if result is not None:
+            from z3DPSlicer.zGraph import zGraph
+            return zGraph(result)
+        return None
