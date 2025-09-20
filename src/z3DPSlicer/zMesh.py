@@ -122,6 +122,7 @@ class zMesh:
             # Add faces
             connection_index = 0
             face_count = 0
+            vertex_set = set(mesh.vertices())
             for face_idx, poly_count in enumerate(poly_counts):
                 try:
                     if poly_count >= 3:  # Need at least 3 vertices for a face
@@ -137,7 +138,7 @@ class zMesh:
                         
                         if len(face_vertices) >= 3:
                             # Check if all vertices exist in the mesh
-                            valid_vertices = [v for v in face_vertices if v in mesh.vertices()]
+                            valid_vertices = [v for v in face_vertices if v in vertex_set]
                             if len(valid_vertices) >= 3:
                                 mesh.add_face(valid_vertices)
                                 face_count += 1

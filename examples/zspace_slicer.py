@@ -1,7 +1,4 @@
-# import slicer from compas_slicer
 import compas
-#from compas.datastructures import Mesh
-#from z3DPSlicer import CompasMesh as Mesh
 from compas_viewer import Viewer
 from compas.geometry import Point, Frame, Vector
 from compas.datastructures import Mesh, Network
@@ -10,7 +7,8 @@ import numpy as np
 import json
 from compas.colors import Color
 from compas.colors.colormap import ColorMap
-from z3DPSlicer import zSlicer
+from z3DPSlicer import zGraph, zSlicer, zUtils
+
 
 def read_mesh_from_zJSON(filePath):
     """Load mesh data from a JSON created by zSpace and update self.mesh.
@@ -135,8 +133,9 @@ def read_start_end_planes(filePath):
         print("Warning: LeftPlanes not found in JSON data.")
         return None, None
 
+
 # Load mesh and planes from JSON
-local_path = "C:/Users/taizhong_chen/Downloads/blockMesh_23.json"
+local_path = "C:\\Users\\Wo.Lin\\source\\repos\\zSpace_3DPSlicer\\data\\blockMesh_23.json"
 mesh = read_mesh_from_zJSON(local_path)
 startPlane, endPlane = read_start_end_planes(local_path)
 
@@ -144,37 +143,67 @@ viewer = Viewer()
 
 # Create slicer and perform slicing
 slicer = zSlicer()
+slicer.min_bb = [-1.5,-1.5, 0.0]
+slicer.max_bb = [1.5, 1.5, 0.0]
 slicer.set_mesh(mesh)
 
 # init field
-slicer.init_field(startPlane, 20, 20)
+slicer.init_field(200, 200)  # Initialize all fields with a resolution of 128x128
 
-# slice
+
 slicer.slice(startPlane, endPlane, 10)
+# slicer.generate_bracing_lines() zgraph not workiing
+
 
 # update contour
-slicer.update_contour(0, 0.002)
+slicer.update_contour(5, 0.05)
+slicer.merge_contours(5, 0.05)
+print(f"Contour center: {slicer.center}")
+
 
 # Add planes to viewer
 frames = slicer.get_frames()
 for frame in frames:
     viewer.scene.add(frame)
+    print(f"Added frame at {frame.point} with normal {frame.zaxis}")
 
 # Add contours to viewer
 contours = slicer.get_contours()
 for contour in contours:
     viewer.scene.add(contour, linecolor=Color.black(), linewidth=2) 
+    print(f"Added contour with {contour.number_of_nodes()} nodes and {contour.number_of_edges()} edges")
+
 
 # Add field to viewer
-field = slicer.get_field()
-field_mesh = field.get_mesh().to_compas_mesh()
-
-# Test offset contour
-offset_contour = slicer.get_field().get_iso_contour(0.05)
-viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=2)
-
-# compute field color map based on values
+# field = slicer.get_field()
+field = slicer.field
 values = field.get_field_values()
+
+field_mesh = field.get_mesh().to_compas_mesh()
+print(f"Field mesh has casted")
+sdf_contour = slicer.get_field().get_iso_contour_direct(0)
+
+
+
+# Separate the contour into connected components like the geodesic example --slow
+# components, component_count = offset_contour.separate_graph()
+# print(f"Found {component_count} connected components in iso-contour")
+
+# for i, component_graph in enumerate(components):
+#     try:
+#         # Convert Graph object to zGraph object
+#         z_component = zGraph(component_graph)
+#         compas_component_network = z_component.to_compas_network()
+#         if compas_component_network.number_of_nodes() > 0:
+#             viewer.scene.add(compas_component_network, linecolor=Color.magenta(), linewidth=3)
+#             print(f"Component {i}: {compas_component_network.number_of_nodes()} nodes, {compas_component_network.number_of_edges()} edges")
+#     except Exception as e:
+#         print(f"Failed to process component {i}: {e}")
+#         continue
+
+viewer.scene.add(sdf_contour.to_compas_network(), linecolor=Color.red(), linewidth=3)
+print(f"iso contour added to viewer")
+
 min_value = np.min(values)
 max_value = np.max(values)
 cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
@@ -185,7 +214,9 @@ for idx, value in enumerate(values):
 
 viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False)
 
+print(f"Field mesh updated")
 # Add mesh to viewer
 viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False)
+
 
 viewer.show()

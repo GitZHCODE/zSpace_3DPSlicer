@@ -15,11 +15,11 @@
     "C_Cpp.errorSquiggles": "enabled",
     "C_Cpp.intelliSenseEngine": "default",
     "C_Cpp.intelliSenseEngineFallback": "enabled",
-    "python.defaultInterpreterPath": "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/python.exe",
+    "python.defaultInterpreterPath": "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\python.exe",
     "python.terminal.activateEnvironment": true,
     "python.analysis.extraPaths": [
         "${workspaceFolder}/src",
-        "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/lib/site-packages"
+        "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\Lib\\site-packages"
     ],
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "basic",
@@ -119,5 +119,8 @@
         "xtr1common": "cpp",
         "xtree": "cpp",
         "xutility": "cpp"
-    }
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
 } 

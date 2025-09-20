@@ -63,9 +63,9 @@ class zGraph:
         
         # Get vertex positions
         for node in compas_network.nodes():
-            x = compas_network.node_attribute(node, 'x', 0.0)
-            y = compas_network.node_attribute(node, 'y', 0.0)
-            z = compas_network.node_attribute(node, 'z', 0.0)
+            # Use node_attributes method which works correctly
+            attrs = compas_network.node_attributes(node, ['x', 'y', 'z'])
+            x, y, z = attrs[0], attrs[1], attrs[2]
             vertices.extend([x, y, z])
         
         # Get edge connections
@@ -77,8 +77,8 @@ class zGraph:
         vertices_array = np.array(vertices, dtype=np.float64)
         edges_array = np.array(edges, dtype=np.int32)
         
-        # Create the graph
-        success = self.zgraph.create_graph(vertices_array, edges_array)
+        # Create the graph using the wrapper method
+        success = self.create_graph(vertices_array, edges_array)
         if not success:
             raise Exception("Failed to create zSpace graph from COMPAS Network")
         

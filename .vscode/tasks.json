@@ -4,14 +4,13 @@
         {
             "label": "Build Project",
             "type": "shell",
-            "command": "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/python.exe",
+            "command": "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\python.exe",
             "args": [
                 "-m",
                 "pip",
                 "install",
                 "-e",
-                ".",
-                "--force-reinstall"
+                "."
             ],
             "group": "build",
             "options": {
@@ -32,7 +31,7 @@
         {
             "label": "Run Basic Example",
             "type": "shell",
-            "command": "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/python.exe",
+            "command": "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\python.exe",
             "args": [
                 "examples/basic_example.py"
             ],
@@ -55,7 +54,7 @@
         {
             "label": "Run GPU Example",
             "type": "shell",
-            "command": "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/python.exe",
+            "command": "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\python.exe",
             "args": [
                 "examples/gpu_eigen_example.py"
             ],
@@ -78,7 +77,7 @@
         {
             "label": "Run Tests",
             "type": "shell",
-            "command": "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/python.exe",
+            "command": "C:/Users/Wo.Lin/AppData/Local/anaconda3/envs/3DPBindingEnv/python.exe",
             "args": [
                 "-m",
                 "pytest",

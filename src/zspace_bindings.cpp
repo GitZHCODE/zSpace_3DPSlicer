@@ -50,7 +50,7 @@ public:
                                      vertex_positions.data(),
                                      static_cast<int>(vertex_positions.size() / 3),
                                      edge_connections.data(),
-                                     static_cast<int>(edge_connections.size() / 2)) == 1;
+                                     static_cast<int>(edge_connections.size())) == 1;
     }
 
     nb::tuple get_graph_data() {
@@ -58,35 +58,43 @@ public:
         int edge_connections_size = 0;
         
         // First call: get the counts
-        if (zext_graph_get_graph_data(handle, true,
+        int result1 = zext_graph_get_graph_data(handle, true,
                                     nullptr, &vertex_count,
-                                    nullptr, &edge_connections_size) != 1) {
+                                    nullptr, &edge_connections_size);
+        
+        if (result1 != 1) {
             return nb::make_tuple(
-                nb::ndarray<double>(nullptr, {0, 3}),
-                nb::ndarray<int>(nullptr, {0, 2})
+                nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
             );
         }
         
         if (vertex_count <= 0 || edge_connections_size <= 0) {
             return nb::make_tuple(
-                nb::ndarray<double>(nullptr, {0, 3}),
-                nb::ndarray<int>(nullptr, {0, 2})
+                nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
             );
         }
         
+        // NOTE: vertex_count from C API is number of coordinate values (vertices * 3), not actual vertex count
         // Allocate vectors with the correct sizes
-        std::vector<double> vertex_positions(vertex_count * 3);
+        std::vector<double> vertex_positions(vertex_count);  // vertex_count is already coordinates count
         std::vector<int> edge_connections(edge_connections_size);
         
         // Second call: get the actual data
-        if (zext_graph_get_graph_data(handle, false,
+        int result2 = zext_graph_get_graph_data(handle, false,
                                     vertex_positions.data(), &vertex_count,
-                                    edge_connections.data(), &edge_connections_size) == 1) {
+                                    edge_connections.data(), &edge_connections_size);
+        
+        if (result2 == 1) {
+            
+            // Calculate actual vertex count (vertex_count from API is coordinate count)
+            int actual_vertex_count = vertex_count / 3;
             
             // Check if edge indices are reasonable
             bool valid_edges = true;
             for (int i = 0; i < edge_connections_size; ++i) {
-                if (edge_connections[i] < 0 || edge_connections[i] >= vertex_count) {
+                if (edge_connections[i] < 0 || edge_connections[i] >= actual_vertex_count) {
                     valid_edges = false;
                     break;
                 }
@@ -94,18 +102,18 @@ public:
             
             if (!valid_edges) {
                 return nb::make_tuple(
-                    nb::ndarray<double>(nullptr, {0, 3}),
-                    nb::ndarray<int>(nullptr, {0, 2})
+                    nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+                    nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
                 );
             }
             
             // Allocate memory for the arrays with exact sizes
-            double* vertices_data = new double[vertex_count * 3];
+            double* vertices_data = new double[vertex_count];  // vertex_count is already coordinate count
             int* edges_data = new int[edge_connections_size];
             
             // Copy data from vectors to allocated memory
             std::memcpy(vertices_data, vertex_positions.data(), 
-                       vertex_count * 3 * sizeof(double));
+                       vertex_count * sizeof(double));
             std::memcpy(edges_data, edge_connections.data(), 
                        edge_connections_size * sizeof(int));
             
@@ -120,7 +128,7 @@ public:
             // Create numpy arrays with proper ownership using template syntax
             auto vertices_array = nb::ndarray<nb::numpy, double, nb::ndim<2>>(
                 vertices_data, 
-                {static_cast<size_t>(vertex_count), 3}, 
+                {static_cast<size_t>(actual_vertex_count), 3}, 
                 vertices_owner
             );
             auto edges_array = nb::ndarray<nb::numpy, int, nb::ndim<1>>(
@@ -133,8 +141,8 @@ public:
         }
         
         return nb::make_tuple(
-            nb::ndarray<double>(nullptr, {0, 3}),
-            nb::ndarray<int>(nullptr, {0, 2})
+            nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+            nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
         );
     }
 
@@ -221,22 +229,23 @@ public:
                                   nullptr, &face_count,
                                   nullptr, &poly_connections_size) != 1) {
             return nb::make_tuple(
-                nb::ndarray<double>(nullptr, {0, 3}),
-                nb::ndarray<int>(nullptr, {0}),
-                nb::ndarray<int>(nullptr, {0})
+                nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
             );
         }
         
         if (vertex_count <= 0 || face_count <= 0) {
             return nb::make_tuple(
-                nb::ndarray<double>(nullptr, {0, 3}),
-                nb::ndarray<int>(nullptr, {0}),
-                nb::ndarray<int>(nullptr, {0})
+                nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0}),
+                nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
             );
         }
         
+        // NOTE: vertex_count from C API is number of coordinate values (vertices * 3), not actual vertex count
         // Allocate vectors with the correct sizes
-        std::vector<double> vertex_positions(vertex_count * 3);
+        std::vector<double> vertex_positions(vertex_count);  // vertex_count is already coordinates count
         std::vector<int> poly_counts(face_count);
         std::vector<int> poly_connections(poly_connections_size);
         
@@ -246,14 +255,17 @@ public:
                                   poly_counts.data(), &face_count,
                                   poly_connections.data(), &poly_connections_size) == 1) {
             
+            // Calculate actual vertex count (vertex_count from API is coordinate count)
+            int actual_vertex_count = vertex_count / 3;
+            
             // Allocate memory for the arrays
-            double* vertices_data = new double[vertex_count * 3];
+            double* vertices_data = new double[vertex_count];  // vertex_count is already coordinate count
             int* poly_counts_data = new int[face_count];
             int* poly_connections_data = new int[poly_connections_size];
             
             // Copy data from vectors to allocated memory
             std::memcpy(vertices_data, vertex_positions.data(), 
-                       vertex_count * 3 * sizeof(double));
+                       vertex_count * sizeof(double));
             std::memcpy(poly_counts_data, poly_counts.data(), 
                        face_count * sizeof(int));
             std::memcpy(poly_connections_data, poly_connections.data(), 
@@ -273,7 +285,7 @@ public:
             // Create numpy arrays with proper ownership using template syntax
             auto vertices_array = nb::ndarray<nb::numpy, double, nb::ndim<2>>(
                 vertices_data, 
-                {static_cast<size_t>(vertex_count), 3}, 
+                {static_cast<size_t>(actual_vertex_count), 3}, 
                 vertices_owner
             );
             auto poly_counts_array = nb::ndarray<nb::numpy, int, nb::ndim<1>>(
@@ -291,9 +303,9 @@ public:
         }
         
         return nb::make_tuple(
-            nb::ndarray<double>(nullptr, {0, 3}),
-            nb::ndarray<int>(nullptr, {0}),
-            nb::ndarray<int>(nullptr, {0})
+            nb::ndarray<nb::numpy, double, nb::ndim<2>>(nullptr, {0, 3}),
+            nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0}),
+            nb::ndarray<nb::numpy, int, nb::ndim<1>>(nullptr, {0})
         );
     }
 
@@ -1015,4 +1027,4 @@ NB_MODULE(_zspace, m) {
         .def("get_id", &Field::get_id)
         .def("get_positions", &Field::get_positions)
         .def("get_mesh", &Field::get_mesh);
-} 
+}

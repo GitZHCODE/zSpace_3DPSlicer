@@ -3,6 +3,9 @@
 /dist
 /data
 /external
+/zspace_downloads
+/CMakeFiles
+/.vscode
 
 *.pyd
 *.dll

@@ -9,8 +9,8 @@
                 "${workspaceFolder}/external/gpu.cpp",
                 "${workspaceFolder}/external/gpu.cpp/third_party/headers",
                 "${workspaceFolder}/external/dawn/include",
-                "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/Include",
-                "C:/Users/taizhong_chen/miniforge3/envs/py-cpp/lib/site-packages/nanobind/include"
+                "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\include",
+                "C:\\Users\\Wo.Lin\\AppData\\Local\\anaconda3\\envs\\3DPBindingEnv\\Lib\\site-packages\\nanobind\\include"
             ],
             "defines": [
                 "_DEBUG",
