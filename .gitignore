@@ -6,6 +6,7 @@
 /zspace_downloads
 /CMakeFiles
 /.vscode
+/zspace_download-prefix
 
 *.pyd
 *.dll
