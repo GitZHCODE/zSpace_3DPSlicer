@@ -165,58 +165,41 @@ print(f"Contour center: {slicer.center}")
 frames = slicer.get_frames()
 for frame in frames:
     viewer.scene.add(frame)
-    print(f"Added frame at {frame.point} with normal {frame.zaxis}")
 
 # Add contours to viewer
 contours = slicer.get_contours()
 for contour in contours:
     viewer.scene.add(contour, linecolor=Color.black(), linewidth=2) 
-    print(f"Added contour with {contour.number_of_nodes()} nodes and {contour.number_of_edges()} edges")
 
 
 # Add field to viewer
 # field = slicer.get_field()
 field = slicer.field
-values = field.get_field_values()
 
 field_mesh = field.get_mesh().to_compas_mesh()
-print(f"Field mesh has casted")
-sdf_contour = slicer.get_field().get_iso_contour_direct(0)
+
+offset_contour = slicer.get_field().get_iso_contour_direct(0)
+slicer.get_field().get_iso_contour(0) #call it again to use the c++native normalize method
+values = field.get_field_values() #correct values
+viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
 
 
 
-# Separate the contour into connected components like the geodesic example --slow
-# components, component_count = offset_contour.separate_graph()
-# print(f"Found {component_count} connected components in iso-contour")
-
-# for i, component_graph in enumerate(components):
-#     try:
-#         # Convert Graph object to zGraph object
-#         z_component = zGraph(component_graph)
-#         compas_component_network = z_component.to_compas_network()
-#         if compas_component_network.number_of_nodes() > 0:
-#             viewer.scene.add(compas_component_network, linecolor=Color.magenta(), linewidth=3)
-#             print(f"Component {i}: {compas_component_network.number_of_nodes()} nodes, {compas_component_network.number_of_edges()} edges")
-#     except Exception as e:
-#         print(f"Failed to process component {i}: {e}")
-#         continue
-
-viewer.scene.add(sdf_contour.to_compas_network(), linecolor=Color.red(), linewidth=3)
-print(f"iso contour added to viewer")
+#normalise values to 0 to 1
+values = np.array(values)
 
 min_value = np.min(values)
 max_value = np.max(values)
+print(f"Field values range: min={min_value}, max={max_value}")
 cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
 vertex_colors = {}
 for idx, value in enumerate(values):
     normalized_value = (value - min_value) / (max_value - min_value)
     vertex_colors[idx] = cmap(normalized_value)
-
+# print(f"Vertex colors (first 10): {dict(list(vertex_colors.items())[:10])}")
 viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False)
 
-print(f"Field mesh updated")
 # Add mesh to viewer
 viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False)
-
 
 viewer.show()

@@ -330,16 +330,16 @@ class zSlicer:
         
         
         self.compute_bracing()
-        print(f"  Bracing vertex count: {self.bracings.get_vertex_count()}")
+        # print(f"  Bracing vertex count: {self.bracings.get_vertex_count()}")
         self.compute_trim(dist)
-        print(f"  Trim vertex count: {self.trim.get_vertex_count()}")
+        # print(f"  Trim vertex count: {self.trim.get_vertex_count()}")
 
         scalars_offseted = scalars + dist
-        print(f"scalars min: {np.min(scalars)}, max: {np.max(scalars)}")
-        print(f"scalars_offseted min: {np.min(scalars_offseted)}, max: {np.max(scalars_offseted)}")
+        # print(f"scalars min: {np.min(scalars)}, max: {np.max(scalars)}")
+        # print(f"scalars_offseted min: {np.min(scalars_offseted)}, max: {np.max(scalars_offseted)}")
 
         scalars_bracing = self.field.get_scalars_graph_edge_distance(self.bracings, dist * 0.5, False)
-        print(f"scalars_bracing min: {np.min(scalars_bracing)}, max: {np.max(scalars_bracing)}")
+        # print(f"scalars_bracing min: {np.min(scalars_bracing)}, max: {np.max(scalars_bracing)}")
             # self.field.set_field_values(scalars_bracing)
         # self.field.smooth_field(num_smooth=1)
 
@@ -347,26 +347,25 @@ class zSlicer:
 
 
         scalars_bracing_trimmed_0 = self.field.boolean_subtract(scalars_offseted, scalars_bracing,  False)
-        print(f"scalars_bracing_trimmed_0 min: {np.min(scalars_bracing_trimmed_0)}, max: {np.max(scalars_bracing_trimmed_0)}")
+        # print(f"scalars_bracing_trimmed_0 min: {np.min(scalars_bracing_trimmed_0)}, max: {np.max(scalars_bracing_trimmed_0)}")
         # self.field.set_field_values(scalars_bracing_trimmed_0)
         # self.field.smooth_field(num_smooth=1)
         scalars_bracing_trimmed_1 = self.field.boolean_subtract(scalars, scalars_bracing_trimmed_0, False)
-        print(f"scalars_bracing_trimmed_1 min: {np.min(scalars_bracing_trimmed_1)}, max: {np.max(scalars_bracing_trimmed_1)}")
+        # print(f"scalars_bracing_trimmed_1 min: {np.min(scalars_bracing_trimmed_1)}, max: {np.max(scalars_bracing_trimmed_1)}")
         # self.field.set_field_values(scalars_bracing_trimmed_1)
         # self.field.smooth_field(num_smooth=1)   
 
         scalars_trim = self.field.get_scalars_graph_edge_distance(self.trim, dist * 0.5, False)
 
-        print(f"scalars_trim min: {np.min(scalars_trim)}, max: {np.max(scalars_trim)}")
+        # print(f"scalars_trim min: {np.min(scalars_trim)}, max: {np.max(scalars_trim)}")
         # self.field.set_field_values(scalars_trim)
         # self.field.smooth_field(num_smooth=1)
 
         result_scalars = self.field.boolean_subtract(scalars_bracing_trimmed_1, scalars_trim, False)
-        print(f"result_scalars min: {np.min(result_scalars)}, max: {np.max(result_scalars)}")
+
 
         self.field.set_field_values(result_scalars)
-        # self.field.smooth_field(num_smooth=1)
-        print(f"  Field values updated.")
+        self.field.smooth_field(num_smooth=1)
 
     def merge_contours(self,index, threshold=0.05):
             """Merge vertices in a specific contour based on a distance threshold.
