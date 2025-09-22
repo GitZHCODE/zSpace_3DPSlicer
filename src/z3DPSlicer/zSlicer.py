@@ -2,6 +2,7 @@
 zSlicer class for mesh slicing operations.
 """
 
+from math import dist
 from networkx import edges
 import numpy as np
 from compas.geometry import Point, Vector, Frame, Plane, Polyline
@@ -223,12 +224,12 @@ class zSlicer:
         if(contour_index%2==0):
             vertices = [
                 center_point[0]-print_width, self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]-print_width,  center_point[1]+print_width , 0.0   # Second vertex: [center_x, max_y, 0]
+                center_point[0]-print_width,  center_point[1]+print_width*2 , 0.0   # Second vertex: [center_x, max_y, 0]
             ]
         else:
             vertices = [
                 center_point[0]+print_width,  self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]+print_width,  center_point[1]+print_width, 0.0   # Second vertex: [center_x, max_y, 0]
+                center_point[0]+print_width,  center_point[1]+print_width*2, 0.0   # Second vertex: [center_x, max_y, 0]
             ]
         edges = [0, 1]  # Define edges by vertex indices
         vertices_array = np.array(vertices, dtype=np.float64)
@@ -236,82 +237,7 @@ class zSlicer:
         trim_graph.create_graph(vertices_array, edges_array)
         self.trims[contour_index] = trim_graph
 
-
-
-    def slice(self, start_plane, end_plane, print_height):
-        """Slice the mesh between two planes based on print height.
-        
-        Parameters
-        ----------
-        start_plane : compas.geometry.Frame or compas.geometry.Plane
-            The starting plane for slicing
-        end_plane : compas.geometry.Frame or compas.geometry.Plane
-            The ending plane for slicing
-        print_height : float
-            Total height of the print in the same units as the mesh
-        """
-        if self.sliceMesh is None:
-            raise ValueError("No mesh set. Call set_mesh() first.")
-        
-        # Calculate the distance between start and end planes
-        if hasattr(start_plane, 'point'):
-            start_origin = start_plane.point
-        else:
-            start_origin = start_plane.point
-            
-        if hasattr(end_plane, 'point'):
-            end_origin = end_plane.point
-        else:
-            end_origin = end_plane.point
-        
-        # Calculate the distance between the two plane origins
-        plane_distance = start_origin.distance_to_point(end_origin)
-        
-        if plane_distance == 0:
-            raise ValueError("Start and end planes cannot be at the same location")
-        
-        # Calculate layer height based on the plane distance and desired print height
-        num_slices = int (plane_distance / print_height)
-        
-        # Calculate number of slices based on print height
-        num_slices = int(num_slices)
-        if num_slices < 1:
-            num_slices = 1
-        
-        print(f"Slicing with print_height={print_height}, plane_distance={plane_distance:.3f}, resulting in {num_slices} layers")
-            
-        self.frames = []
-        self.contours = []
-        
-        # Use the interpolate_plane function from zUtils
-        frames = zUtils.interpolate_plane(start_plane, end_plane, num_slices)
-        
-        # Don't exclude any planes - we want to process all layers including boundaries
-        self.frames = frames[1:-1]
-
-        for frame in self.frames:
-            origin = frame.point
-            normal = frame.zaxis  # Use zaxis for the normal
-
-            # Perform intersection
-            zgraph = self.sliceMesh.intersect_plane(
-                [origin.x, origin.y, origin.z],
-                [normal.x, normal.y, normal.z]
-            )
-            # zgraph_rebuild = zUtils.rebuild_contour_pattern(zgraph)
-
-            if zgraph is not None and zgraph.get_vertex_count() > 0:
-                # Store the zGraph directly
-                zgraph = zUtils.rebuild_contour_remove_origin(zgraph)
-                if zgraph is not None:
-                    zgraph.merge_vertices(0.001)
-                    self.contours.append(zgraph)
-                else:
-                    self.contours.append(None)
-            else:
-                self.contours.append(None)
-    
-    def slice_compas(self, start_plane, end_plane, print_height):
+    def slice(self, start_plane, end_plane, print_height, start_plane_offset=0.01, end_plane_offset=0.01):
         """Slice the mesh using COMPAS edge-plane intersection and convert results to zGraph objects.
         
         This method uses COMPAS intersection_segment_plane to manually intersect mesh edges
@@ -326,23 +252,48 @@ class zSlicer:
             The ending plane for slicing
         print_height : float
             Height of each print layer in the same units as the mesh
+        start_plane_offset : float, optional
+            Distance to move the start plane inward (default: 0.01)
+        end_plane_offset : float, optional
+            Distance to move the end plane inward (default: 0.01)
         """
         if self.blockMesh is None:
             raise ValueError("No mesh set. Call set_mesh() first.")
         
-        # Calculate the distance between start and end planes
+        # Get plane origins and normals
         if hasattr(start_plane, 'point'):
             start_origin = start_plane.point
+            start_normal = start_plane.zaxis if hasattr(start_plane, 'zaxis') else start_plane.normal
         else:
             start_origin = start_plane.point
+            start_normal = start_plane.normal
             
         if hasattr(end_plane, 'point'):
             end_origin = end_plane.point
+            end_normal = end_plane.zaxis if hasattr(end_plane, 'zaxis') else end_plane.normal
         else:
             end_origin = end_plane.point
+            end_normal = end_plane.normal
         
-        # Calculate the distance between the two plane origins
-        plane_distance = start_origin.distance_to_point(end_origin)
+        # Apply offsets to move planes inward
+        # Move start plane forward by start_plane_offset
+        adjusted_start_origin = start_origin + start_normal * start_plane_offset
+        
+        # Move end plane backward by end_plane_offset  
+        adjusted_end_origin = end_origin - end_normal * end_plane_offset
+        
+        # Create adjusted planes
+        if hasattr(start_plane, 'point'):
+            # It's a Frame
+            adjusted_start_plane = Frame(adjusted_start_origin, start_plane.xaxis, start_plane.yaxis)
+            adjusted_end_plane = Frame(adjusted_end_origin, end_plane.xaxis, end_plane.yaxis)
+        else:
+            # It's a Plane
+            adjusted_start_plane = Plane(adjusted_start_origin, start_normal)
+            adjusted_end_plane = Plane(adjusted_end_origin, end_normal)
+        
+        # Calculate the distance between adjusted plane origins
+        plane_distance = adjusted_start_origin.distance_to_point(adjusted_end_origin)
         
         if plane_distance == 0:
             raise ValueError("Start and end planes cannot be at the same location")
@@ -353,15 +304,16 @@ class zSlicer:
             num_slices = 1
         
         print(f"COMPAS slicing with print_height={print_height}, plane_distance={plane_distance:.3f}, resulting in {num_slices} layers")
+        print(f"Applied offsets: start_plane_offset={start_plane_offset}, end_plane_offset={end_plane_offset}")
             
         self.frames = []
         self.contours = []
         
-        # Use the interpolate_plane function from zUtils
-        frames = zUtils.interpolate_plane(start_plane, end_plane, num_slices)
+        # Use the interpolate_plane function from zUtils with adjusted planes
+        frames = zUtils.interpolate_plane(adjusted_start_plane, adjusted_end_plane, num_slices)
         
-        # Don't exclude any planes - we want to process all layers including boundaries
-        self.frames = frames[1:-1]
+        # Use all interpolated frames - no exclusion needed since we've already adjusted the boundaries
+        self.frames = frames
         
         # Convert mesh to COMPAS format for intersection
         compas_mesh = self.blockMesh.to_compas_mesh()
@@ -375,8 +327,6 @@ class zSlicer:
             zgraph = self._manual_mesh_plane_intersection(compas_mesh, origin, normal)
             
             if zgraph is not None and zgraph.get_vertex_count() > 0:
-                # Apply similar processing as in original slice method
-
                 if zgraph is not None:
 
                     self.contours.append(zgraph)
@@ -464,9 +414,9 @@ class zSlicer:
             # Create zGraph
             vertices_array = np.array(all_vertices, dtype=np.float64)
             edges_array = np.array(all_edges, dtype=np.int32)
-            print(f"Manual intersection produced {len(unique_points)} unique points.")
-            print("Unique Points:", unique_points)
-            print("Edges:", all_edges)
+            # print(f"Manual intersection produced {len(unique_points)} unique points.")
+            # print("Unique Points:", unique_points)
+            # print("Edges:", all_edges)
             zgraph = zGraph()
             success = zgraph.create_graph(vertices_array, edges_array)
             
@@ -541,20 +491,15 @@ class zSlicer:
         scalars_offseted_1 = scalars + 1.5 * print_width
 
         # Check if bracing and trim graphs have vertices before using them
-        if self.bracings[index].get_vertex_count() > 0:
-            scalars_bracing = field.get_scalars_graph_edge_distance(self.bracings[index], print_width * 0.5, False)
-        else:
-            print(f"Warning: Bracing graph is empty for layer {index}, using default field")
-            scalars_bracing = np.ones(len(scalars)) * 1000.0  # Large positive values (outside)
+
+        scalars_bracing = field.get_scalars_graph_edge_distance(self.bracings[index], print_width * 0.5, False)
 
         scalars_bracing_trimmed_0 = field.boolean_subtract(scalars_offseted_1, scalars_bracing,  False)
         scalars_bracing_trimmed_1 = field.boolean_subtract(scalars_offseted_0, scalars_bracing_trimmed_0, False)
 
-        if self.trims[index].get_vertex_count() > 0:
-            scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.25, False)
-        else:
-            print(f"Warning: Trim graph is empty for layer {index}, using default field")
-            scalars_trim = np.ones(len(scalars)) * 1000.0  # Large positive values (outside)
+
+        scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.5 * 0.8, False) #*0.9 to make sure tips touches
+
 
         result_scalars = field.boolean_subtract(scalars_bracing_trimmed_1, scalars_trim, False)
 
@@ -595,6 +540,13 @@ class zSlicer:
         self.contours[index].transform(tMatrix_back)
         field.get_iso_contour(0)
         self.fields[index] = field
+        #transform back the center point
+        from compas.geometry import Transformation
+        center_pt = Point(self.centers[index][0], self.centers[index][1], self.centers[index][2])
+        # Use COMPAS Transformation for Point transformation instead of raw matrix
+        transformation_back = Transformation.from_frame_to_frame(Frame.worldXY(), frame)
+        center_pt.transform(transformation_back)
+        self.centers[index] = [center_pt.x, center_pt.y, center_pt.z]
 
     def update_all_contours(self, print_width):
         """Update all contours at once and store all geometries.
@@ -682,40 +634,163 @@ class zSlicer:
             List of zField objects for all layers
         """
         return self.fields
-    
-    def export_contours(self, filepath):
-        """Export contours to a JSON file.
+
+    def export_contours(self, filepath, print_width, print_height):
+        """Export contours to a JSON file with print plane data.
         
         Parameters
         ----------
         filepath : str
             Path to save the JSON file
+        print_width : float
+            Width of the print path
+        print_height : float
+            Default print height (used for fallback cases)
         """
         import json
+        import math
         
         contours_data = []
+        # 1. change seam
         for i, contour in enumerate(self.contours):
-            if contour is not None:
-                contour_data = {
-                    'plane_index': i,
-                    'vertices': [],
-                    'edges': []
-                }
+            if contour is not None and i < len(self.frames):
+                # Get current frame and center
+                current_frame = self.frames[i]
+                current_center = self.centers[i] if i < len(self.centers) else [0, 0, 0]
                 
                 # Convert zGraph to network for export
                 network = contour.to_compas_network()
                 
-                # Add vertices
+                # Get all vertices with their positions
+                vertices_with_distances = []
                 for node in network.nodes():
                     xyz = network.node_attributes(node, 'xyz')
                     if xyz:
-                        contour_data['vertices'].append([xyz[0], xyz[1], xyz[2]])
+                        vertex_pos = [xyz[0], xyz[1], xyz[2]]
+                        # Calculate distance to SDF center
+                        dist_to_center = math.sqrt(
+                            (xyz[0] - current_center[0])**2 + 
+                            (xyz[1] - current_center[1])**2 + 
+                            (xyz[2] - current_center[2])**2
+                        )
+                        vertices_with_distances.append((node, vertex_pos, dist_to_center))
                 
-                # Add edges
+                # Sort vertices by distance to center (closest first for seam point)
+                vertices_with_distances.sort(key=lambda x: x[2])
+                
+                # Reorder vertices starting from the closest to center (seam point)
+                if vertices_with_distances:
+                    seam_node = vertices_with_distances[0][0]
+                    
+                    # Build ordered vertex list starting from seam point
+                    ordered_vertices = []
+                    visited = set()
+                    current_node = seam_node
+                    
+                    # Try to build a connected path from the seam point
+                    while current_node is not None and current_node not in visited:
+                        visited.add(current_node)
+                        xyz = network.node_attributes(current_node, 'xyz')
+                        if xyz:
+                            ordered_vertices.append([xyz[0], xyz[1], xyz[2]])
+                        
+                        # Find next connected node that hasn't been visited
+                        next_node = None
+                        for neighbor in network.neighbors(current_node):
+                            if neighbor not in visited:
+                                next_node = neighbor
+                                break
+                        current_node = next_node
+                    
+                    # If we didn't get all vertices, add the remaining ones
+                    if len(ordered_vertices) < len(vertices_with_distances):
+                        for node, vertex_pos, _ in vertices_with_distances:
+                            if node not in visited:
+                                ordered_vertices.append(vertex_pos)
+                    # updates contour vertices to new ordering
+                    if ordered_vertices:
+                        # Flatten vertex positions for zGraph
+                        new_contour = zGraph()
+                        vertices_flat = []
+                        for vertex_pos in ordered_vertices:
+                            vertices_flat.extend([vertex_pos[0], vertex_pos[1], vertex_pos[2]])
+                        
+                        # Create edges connecting consecutive vertices in a loop
+                        edges_flat = []
+                        num_vertices = len(ordered_vertices)
+                        for j in range(num_vertices):
+                            next_idx = (j + 1) % num_vertices  # Loop back to 0 at the end
+                            edges_flat.extend([j, next_idx])
+                        
+                        # Update the contour using zGraph methods
+                        vertices_array = np.array(vertices_flat, dtype=np.float64)
+                        edges_array = np.array(edges_flat, dtype=np.int32)
+                        new_contour.create_graph(vertices_array, edges_array)
+                        self.contours[i] = new_contour
+
+                else:
+                    ordered_vertices = []
+                
+                # Create print plane data for each vertex
+                print_planes = []
+                for vertex_pos in ordered_vertices:
+                    print_plane = {
+                        'origin': vertex_pos,
+                        'normal': [current_frame.zaxis.x, current_frame.zaxis.y, current_frame.zaxis.z],
+                        'x_axis': [current_frame.xaxis.x, current_frame.xaxis.y, current_frame.xaxis.z],
+                        'y_axis': [current_frame.yaxis.x, current_frame.yaxis.y, current_frame.yaxis.z]
+                    }
+                    print_planes.append(print_plane)
+                
+                # Calculate print height for each vertex (distance from vertex to next frame's plane)
+                print_heights = []
+                
+                # Calculate per-vertex heights
+                for j, vertex_pos in enumerate(ordered_vertices):
+                    if i + 1 < len(self.frames):
+                        # Calculate distance from current vertex to next frame's plane
+                        next_frame = self.frames[i + 1]
+                        current_point = Point(vertex_pos[0], vertex_pos[1], vertex_pos[2])
+                        next_plane = Plane(next_frame.point, next_frame.zaxis)
+                        vertex_height = next_plane.distance_to_point(current_point)
+                        print_heights.append(vertex_height)
+                    else:
+                        prev_frame = self.frames[i - 1]
+                        fallback_height = prev_frame.point.distance_to_point(current_frame.point)
+                        print_heights.append(fallback_height)
+                
+                # Get edges in the new ordering
+                edges = []
                 for edge in network.edges():
-                    contour_data['edges'].append(list(edge))
+                    edges.append(list(edge))
+                
+                contour_data = {
+                    'layer_index': i,
+                    'vertices': ordered_vertices,
+                    'print_planes': print_planes,
+                    'print_width': print_width,
+                    'print_heights': print_heights,  # Now each vertex has its own height
+                    'sdf_center': current_center,
+                    'frame_origin': [current_frame.point.x, current_frame.point.y, current_frame.point.z],
+                    'frame_normal': [current_frame.zaxis.x, current_frame.zaxis.y, current_frame.zaxis.z],
+                    'edges': edges
+                }
                 
                 contours_data.append(contour_data)
         
+        # Export data
+        export_data = {
+            'print_data': contours_data,
+            'total_layers': len(contours_data),
+            'metadata': {
+                'print_width': print_width,
+                'field_resolution': [self.field_x_res, self.field_y_res],
+                'bounding_box': {
+                    'min': self.min_bb,
+                    'max': self.max_bb
+                }
+            }
+        }
+        
         with open(filepath, 'w') as f:
-            json.dump(contours_data, f, indent=2) 
+            json.dump(export_data, f, indent=2) 

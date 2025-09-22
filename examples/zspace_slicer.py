@@ -150,22 +150,26 @@ slicer.set_mesh(mesh)
 slicer.init_field(200, 200)  # Initialize field resolution
 
 # Define print parameters
-print_height =0.03 # Number of layers desired
-print_width = 0.05  # Width of the print path
+print_height =0.015 # Number of layers desired
+print_width = 0.036  # Width of the print path
 
-slicer.slice_compas(startPlane, endPlane, print_height)
+slicer.slice(startPlane, endPlane, print_height, start_plane_offset=0.005, end_plane_offset=0.005)
 
 # Update all contours at once
-# slicer.update_all_contours(print_width)
+slicer.update_all_contours(print_width)
 
 print(f"Total contours: {len(slicer.contours)}")
 print(f"Total fields: {len(slicer.fields)}")
 
+#export contours to JSON
+output_path = "./data/blockMesh_23_contours.json"
+slicer.export_contours(output_path, print_width, print_height=print_height)
+print(f"Exported contours to: {output_path}")
 # Initialize viewer
 viewer = Viewer()
 
 # Add mesh with low opacity
-viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=0.2)
+viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=0.5,name="Input")
 print("mesh added")
 
 # Add all contours to the scene
@@ -179,6 +183,33 @@ for i, contour in enumerate(slicer.contours):
         except Exception as e:
             print(f"Error adding contour for layer {i}: {e}")
 
+# Add center points visualization
+print(f"Adding center points for {len(slicer.centers)} layers")
+for i, center in enumerate(slicer.centers):
+    if center is not None and len(center) >= 3:
+        try:
+            center_point = Point(center[0], center[1], center[2])
+            viewer.scene.add(center_point, pointcolor=Color.red(), pointsize=10, name=f"Center {i}")
+            print(f"Added center point for layer {i}: {center}")
+        except Exception as e:
+            print(f"Error adding center point for layer {i}: {e}")
+
+# Add first points of contours visualization
+print(f"Adding first contour points for visualization")
+for i, contour in enumerate(slicer.contours):
+    if contour is not None:
+        try:
+            network = contour.to_compas_network()
+            if network.number_of_nodes() > 0:
+                # Get the first node in the network
+                first_node = list(network.nodes())[0]
+                node_coords = network.node_coordinates(first_node)
+                first_point = Point(node_coords[0], node_coords[1], node_coords[2])
+                viewer.scene.add(first_point, pointcolor=Color.green(), pointsize=8, name=f"Seam {i}")
+                print(f"Added first point for layer {i}: {node_coords}")
+        except Exception as e:
+            print(f"Error adding first point for layer {i}: {e}")
+
 # Add only the first valid field mesh (layer 1, since we skip boundary layer 0)
 target_layer = 1
 if target_layer < len(slicer.fields):
@@ -188,8 +219,8 @@ if target_layer < len(slicer.fields):
             field_mesh = field.get_mesh().to_compas_mesh()
             
             # Get field values and create color mapping
-            field.get_iso_contour(0)  # normalize
             values = field.get_field_values()
+            contours = field.get_iso_contour_direct(0)
             if values is not None and len(values) > 0:
                 values = np.array(values)
                 min_value = np.min(values)
@@ -207,13 +238,9 @@ if target_layer < len(slicer.fields):
                     print(f"Added field mesh for layer {target_layer}")
                     
                     # Add iso contour if available
-                    try:
-                        offset_contour = field.get_iso_contour_direct(0)
-                        if offset_contour and offset_contour.get_vertex_count() > 0:
-                            viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
-                            print(f"Added iso contour for layer {target_layer}")
-                    except Exception as e:
-                        print(f"Could not add iso contour for layer {target_layer}: {e}")
+
+                    viewer.scene.add(contours.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
+
                         
         except Exception as e:
             print(f"Error adding field for layer {target_layer}: {e}")
@@ -222,6 +249,10 @@ print(f"\nVisualization complete!")
 print(f"Showing:")
 print(f"- Original mesh (transparent)")
 print(f"- All contours ({len([c for c in slicer.contours if c is not None])} layers)")
+print(f"- Center points for each layer (red points)")
+print(f"- First points of each contour (green points)")
 print(f"- Field mesh for layer {target_layer}")
 
+
 viewer.show()
+
