@@ -1,3 +1,4 @@
+from os import name
 import compas
 from compas_viewer import Viewer
 from compas.geometry import Point, Frame, Vector
@@ -139,8 +140,6 @@ local_path = "C:\\Users\\Wo.Lin\\source\\repos\\zSpace_3DPSlicer\\data\\blockMes
 mesh = read_mesh_from_zJSON(local_path)
 startPlane, endPlane = read_start_end_planes(local_path)
 
-viewer = Viewer()
-
 # Create slicer and perform slicing
 slicer = zSlicer()
 slicer.min_bb = [-1.5,-1.5, 0.0]
@@ -148,58 +147,81 @@ slicer.max_bb = [1.5, 1.5, 0.0]
 slicer.set_mesh(mesh)
 
 # init field
-slicer.init_field(200, 200)  # Initialize all fields with a resolution of 128x128
+slicer.init_field(200, 200)  # Initialize field resolution
 
+# Define print parameters
+print_height =0.03 # Number of layers desired
+print_width = 0.05  # Width of the print path
 
-slicer.slice(startPlane, endPlane, 10)
-# slicer.generate_bracing_lines() zgraph not workiing
+slicer.slice_compas(startPlane, endPlane, print_height)
 
+# Update all contours at once
+# slicer.update_all_contours(print_width)
 
-# update contour
-slicer.update_contour(5, 0.05)
-slicer.merge_contours(5, 0.05)
-print(f"Contour center: {slicer.center}")
+print(f"Total contours: {len(slicer.contours)}")
+print(f"Total fields: {len(slicer.fields)}")
 
+# Initialize viewer
+viewer = Viewer()
 
-# Add planes to viewer
-frames = slicer.get_frames()
-for frame in frames:
-    viewer.scene.add(frame)
+# Add mesh with low opacity
+viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=0.2)
+print("mesh added")
 
-# Add contours to viewer
-contours = slicer.get_contours()
-for contour in contours:
-    viewer.scene.add(contour, linecolor=Color.black(), linewidth=2) 
+# Add all contours to the scene
+for i, contour in enumerate(slicer.contours):
+    if contour is not None:
+        try:
+            network = contour.to_compas_network()
+            if network.number_of_nodes() > 0:
+                viewer.scene.add(network, linecolor=Color.magenta(), linewidth=2, name=f"Contour {i}")
+                print(f"Added contour for layer {i}")
+        except Exception as e:
+            print(f"Error adding contour for layer {i}: {e}")
 
+# Add only the first valid field mesh (layer 1, since we skip boundary layer 0)
+target_layer = 1
+if target_layer < len(slicer.fields):
+    field = slicer.fields[target_layer]
+    if field is not None:
+        try:
+            field_mesh = field.get_mesh().to_compas_mesh()
+            
+            # Get field values and create color mapping
+            field.get_iso_contour(0)  # normalize
+            values = field.get_field_values()
+            if values is not None and len(values) > 0:
+                values = np.array(values)
+                min_value = np.min(values)
+                max_value = np.max(values)
+                
+                if max_value > min_value:  # Avoid division by zero
+                    cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
+                    vertex_colors = {}
+                    for idx, value in enumerate(values):
+                        normalized_value = (value - min_value) / (max_value - min_value)
+                        vertex_colors[idx] = cmap(normalized_value)
+                    
+                    # Add field mesh to scene
+                    viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False,name= f"SDF Mesh {target_layer}")
+                    print(f"Added field mesh for layer {target_layer}")
+                    
+                    # Add iso contour if available
+                    try:
+                        offset_contour = field.get_iso_contour_direct(0)
+                        if offset_contour and offset_contour.get_vertex_count() > 0:
+                            viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
+                            print(f"Added iso contour for layer {target_layer}")
+                    except Exception as e:
+                        print(f"Could not add iso contour for layer {target_layer}: {e}")
+                        
+        except Exception as e:
+            print(f"Error adding field for layer {target_layer}: {e}")
 
-# Add field to viewer
-# field = slicer.get_field()
-field = slicer.field
-
-field_mesh = field.get_mesh().to_compas_mesh()
-
-offset_contour = slicer.get_field().get_iso_contour_direct(0)
-slicer.get_field().get_iso_contour(0) #call it again to use the c++native normalize method
-values = field.get_field_values() #correct values
-viewer.scene.add(offset_contour.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
-
-
-
-#normalise values to 0 to 1
-values = np.array(values)
-
-min_value = np.min(values)
-max_value = np.max(values)
-print(f"Field values range: min={min_value}, max={max_value}")
-cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
-vertex_colors = {}
-for idx, value in enumerate(values):
-    normalized_value = (value - min_value) / (max_value - min_value)
-    vertex_colors[idx] = cmap(normalized_value)
-# print(f"Vertex colors (first 10): {dict(list(vertex_colors.items())[:10])}")
-viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False)
-
-# Add mesh to viewer
-viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False)
+print(f"\nVisualization complete!")
+print(f"Showing:")
+print(f"- Original mesh (transparent)")
+print(f"- All contours ({len([c for c in slicer.contours if c is not None])} layers)")
+print(f"- Field mesh for layer {target_layer}")
 
 viewer.show()
