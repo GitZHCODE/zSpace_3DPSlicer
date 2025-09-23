@@ -142,16 +142,18 @@ startPlane, endPlane = read_start_end_planes(local_path)
 
 # Create slicer and perform slicing
 slicer = zSlicer()
-slicer.min_bb = [-1.5,-1.5, 0.0]
-slicer.max_bb = [1.5, 1.5, 0.0]
+slicer.min_bb = [-0.5,-1.5, 0.0]
+slicer.max_bb = [0.5, 0.5, 0.0]
 slicer.set_mesh(mesh)
 
 # init field
-slicer.init_field(200, 200)  # Initialize field resolution
+slicer.init_field(256, 256)  # Initialize field resolution
 
 # Define print parameters
-print_height =0.015 # Number of layers desired
-print_width = 0.036  # Width of the print path
+print_height = 0.0060  # Number of layers desired
+# print_height = 0.10  # Number of layers desired
+
+print_width = 0.014  # Width of the print path
 
 slicer.slice(startPlane, endPlane, print_height, start_plane_offset=0.005, end_plane_offset=0.005)
 

@@ -86,14 +86,19 @@ class zSlicer:
         values_array = np.array(values)
         
         # Create coordinate grids
+        # Note: C++ field data appears to have x varying first, so we need to 
+        # reshape and interpret coordinates accordingly
         x_indices = np.arange(x_res)
         y_indices = np.arange(y_res)
+        
+        # Reshape values assuming C++ column-major layout (x varies first)
+        values_2d = values_array.reshape((x_res, y_res)).T  # Transpose to match NumPy row-major
         xx, yy = np.meshgrid(x_indices, y_indices)
         
         # Flatten arrays
         xx_flat = xx.flatten()
         yy_flat = yy.flatten()
-        values_flat = values_array.flatten()
+        values_flat = values_2d.flatten()
         
         if method == 'interior_centroid':
             # Use only interior points (negative values)
@@ -174,8 +179,8 @@ class zSlicer:
         world_y = self.min_bb[1] + center_y_normalized * bb_height
         world_z = self.min_bb[2]
         
-        #  xy looks filped
-        self.center = [world_y, world_x, world_z]
+        # Coordinates should now be correct without flipping
+        self.center = [world_x, world_y, world_z]
 
 
     def compute_bracing(self, layer_index, center_point):
@@ -224,12 +229,12 @@ class zSlicer:
         if(contour_index%2==0):
             vertices = [
                 center_point[0]-print_width, self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]-print_width,  center_point[1]+print_width*2 , 0.0   # Second vertex: [center_x, max_y, 0]
+                center_point[0]-print_width,  center_point[1]+print_width*4 , 0.0   # Second vertex: [center_x, max_y, 0]
             ]
         else:
             vertices = [
                 center_point[0]+print_width,  self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]+print_width,  center_point[1]+print_width*2, 0.0   # Second vertex: [center_x, max_y, 0]
+                center_point[0]+print_width,  center_point[1]+print_width*4, 0.0   # Second vertex: [center_x, max_y, 0]
             ]
         edges = [0, 1]  # Define edges by vertex indices
         vertices_array = np.array(vertices, dtype=np.float64)
@@ -493,13 +498,15 @@ class zSlicer:
         # Check if bracing and trim graphs have vertices before using them
 
         scalars_bracing = field.get_scalars_graph_edge_distance(self.bracings[index], print_width * 0.5, False)
-
+        print(f"Scalars bracing range: [{np.min(scalars_bracing):.3f}, {np.max(scalars_bracing):.3f}]")
         scalars_bracing_trimmed_0 = field.boolean_subtract(scalars_offseted_1, scalars_bracing,  False)
+        print(f"Scalars bracing trimmed 0 range: [{np.min(scalars_bracing_trimmed_0):.3f}, {np.max(scalars_bracing_trimmed_0):.3f}]")
         scalars_bracing_trimmed_1 = field.boolean_subtract(scalars_offseted_0, scalars_bracing_trimmed_0, False)
+        print(f"Scalars bracing trimmed 1 range: [{np.min(scalars_bracing_trimmed_1):.3f}, {np.max(scalars_bracing_trimmed_1):.3f}]")
 
 
-        scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.5 * 0.8, False) #*0.9 to make sure tips touches
-
+        scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.5 * 0.5, False) #*0.9 to make sure tips touches
+        print(f"Scalars trim range: [{np.min(scalars_trim):.3f}, {np.max(scalars_trim):.3f}]")
 
         result_scalars = field.boolean_subtract(scalars_bracing_trimmed_1, scalars_trim, False)
 
