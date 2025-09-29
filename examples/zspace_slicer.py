@@ -1,7 +1,7 @@
 from os import name
 import compas
 from compas_viewer import Viewer
-from compas.geometry import Point, Frame, Vector
+from compas.geometry import Point, Frame, Vector, Transformation
 from compas.datastructures import Mesh, Network
 
 import numpy as np
@@ -135,10 +135,56 @@ def read_start_end_planes(filePath):
         return None, None
 
 
+def transform_mesh_to_worldxy(mesh, start_plane):
+    """Transform mesh to align with world XY plane based on start plane orientation.
+    Uses the CORRECT transformation (without the transpose bug) for COMPAS meshes.
+    
+    Parameters
+    ----------
+    mesh : compas.datastructures.Mesh
+        The mesh to transform
+    start_plane : compas.geometry.Frame
+        The start plane frame to use as reference (should be the first slicing frame)
+        
+    Returns
+    -------
+    compas.datastructures.Mesh
+        The transformed mesh
+    """
+    if start_plane is None:
+        print("Warning: No start plane provided, returning original mesh")
+        return mesh
+    
+    # Use the CORRECT transformation for COMPAS meshes (without the transpose bug)
+    # This provides the mathematically correct transformation for mesh display
+    first_transform = zUtils.plane_to_plane_correct(start_plane, Frame.worldXY())
+    
+    # COMPAS expects the transformation matrix as a list of lists
+    if isinstance(first_transform, np.ndarray):
+        first_transform = first_transform.tolist()
+    
+    # Create a copy of the mesh to transform
+    mesh_transformed = mesh.copy()
+    
+    # Apply the correct transformation for proper mesh alignment
+    mesh_transformed.transform(first_transform)
+
+    print(f"Transformed mesh using CORRECT transformation (without transpose bug)")
+    print(f"Start plane origin: {start_plane.point}")
+    print(f"Start plane X-axis: {start_plane.xaxis}")  
+    print(f"Start plane Y-axis: {start_plane.yaxis}")
+    print(f"Start plane Z-axis: {start_plane.zaxis}")
+    print(f"Using plane_to_plane_correct for proper mesh alignment")
+    
+    return mesh_transformed
+
+
 # Load mesh and planes from JSON
 local_path = "C:\\Users\\Wo.Lin\\source\\repos\\zSpace_3DPSlicer\\data\\blockMesh_23.json"
 mesh = read_mesh_from_zJSON(local_path)
 startPlane, endPlane = read_start_end_planes(local_path)
+
+
 
 # Create slicer and perform slicing
 slicer = zSlicer()
@@ -147,18 +193,18 @@ slicer.max_bb = [0.5, 0.5, 0.0]
 slicer.set_mesh(mesh)
 
 # init field
-slicer.init_field(256, 256)  # Initialize field resolution
+slicer.init_field(400, 400)  # Initialize field resolution
 
 # Define print parameters
-print_height = 0.0060  # Number of layers desired
-# print_height = 0.10  # Number of layers desired
+# print_height = 0.012  # Number of layers desired
+print_height = 0.6  # Number of layers desired
 
-print_width = 0.014  # Width of the print path
+print_width = 0.028  # Width of the print path
 
 slicer.slice(startPlane, endPlane, print_height, start_plane_offset=0.005, end_plane_offset=0.005)
 
 # Update all contours at once
-slicer.update_all_contours(print_width)
+slicer.update_all_contours(print_width,shape="Y")
 
 print(f"Total contours: {len(slicer.contours)}")
 print(f"Total fields: {len(slicer.fields)}")
@@ -170,8 +216,23 @@ print(f"Exported contours to: {output_path}")
 # Initialize viewer
 viewer = Viewer()
 
-# Add mesh with low opacity
-viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=0.5,name="Input")
+# Get the first slicing frame to match the slicer's first_transform
+slicer_frames = slicer.get_frames()
+if slicer_frames and len(slicer_frames) > 0:
+    first_slicing_frame = slicer_frames[0]
+    print(f"Using first slicing frame for mesh transformation:")
+    print(f"  Origin: {first_slicing_frame.point}")
+    print(f"  X-axis: {first_slicing_frame.xaxis}")
+    print(f"  Y-axis: {first_slicing_frame.yaxis}")
+    print(f"  Z-axis: {first_slicing_frame.zaxis}")
+    
+    # Transform mesh to match the slicer's coordinate system
+    mesh = transform_mesh_to_worldxy(mesh, first_slicing_frame)
+else:
+    print("Warning: No slicing frames found, using original startPlane for transformation")
+    mesh = transform_mesh_to_worldxy(mesh, startPlane)
+
+viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=0.1,name="Input")
 print("mesh added")
 
 # Add all contours to the scene
@@ -184,17 +245,6 @@ for i, contour in enumerate(slicer.contours):
                 print(f"Added contour for layer {i}")
         except Exception as e:
             print(f"Error adding contour for layer {i}: {e}")
-
-# Add center points visualization
-print(f"Adding center points for {len(slicer.centers)} layers")
-for i, center in enumerate(slicer.centers):
-    if center is not None and len(center) >= 3:
-        try:
-            center_point = Point(center[0], center[1], center[2])
-            viewer.scene.add(center_point, pointcolor=Color.red(), pointsize=10, name=f"Center {i}")
-            print(f"Added center point for layer {i}: {center}")
-        except Exception as e:
-            print(f"Error adding center point for layer {i}: {e}")
 
 # Add first points of contours visualization
 print(f"Adding first contour points for visualization")
@@ -213,7 +263,7 @@ for i, contour in enumerate(slicer.contours):
             print(f"Error adding first point for layer {i}: {e}")
 
 # Add only the first valid field mesh (layer 1, since we skip boundary layer 0)
-target_layer = 1
+target_layer = 0
 if target_layer < len(slicer.fields):
     field = slicer.fields[target_layer]
     if field is not None:
@@ -221,31 +271,40 @@ if target_layer < len(slicer.fields):
             field_mesh = field.get_mesh().to_compas_mesh()
             
             # Get field values and create color mapping
+            contours = slicer.polygon_contours[target_layer]
             values = field.get_field_values()
-            contours = field.get_iso_contour_direct(0)
+
             if values is not None and len(values) > 0:
                 values = np.array(values)
-                min_value = np.min(values)
-                max_value = np.max(values)
                 
-                if max_value > min_value:  # Avoid division by zero
-                    cmap = ColorMap.from_two_colors(Color.blue(), Color.red())
-                    vertex_colors = {}
-                    for idx, value in enumerate(values):
-                        normalized_value = (value - min_value) / (max_value - min_value)
-                        vertex_colors[idx] = cmap(normalized_value)
-                    
-                    # Add field mesh to scene
-                    viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False,name= f"SDF Mesh {target_layer}")
-                    print(f"Added field mesh for layer {target_layer}")
-                    
-                    # Add iso contour if available
-
-                    viewer.scene.add(contours.to_compas_network(), linecolor=Color.magenta(), linewidth=3)
-
-                        
+                # Create color mapping based on field values
+                threshold = 0.02
+                vertex_colors = {}
+                for idx, value in enumerate(values):
+                    if value > threshold:
+                        vertex_colors[idx] = Color.from_rgb255(220, 220, 220)
+                    elif value < -threshold:
+                        # Map value from -1.0 to -threshold into color from (0,40,240) to (180,200,255)
+                        t = min(max((value + 1.0) / (1.0 - threshold), 0.0), 1.0)  # Clamp t between 0 and 1
+                        r = int(0 + t * (180 - 0))
+                        g = int(40 + t * (200 - 40))
+                        b = int(240 + t * (255 - 240))
+                        vertex_colors[idx] = Color.from_rgb255(r, g, b)
+                    else:  # Between -threshold and threshold
+                        vertex_colors[idx] = Color.from_rgb255(240, 0, 140)
+                # Add field mesh to scene
+                viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False,name= f"SDF Mesh {target_layer}")
+                print(f"Added field mesh for layer {target_layer}")
+                
+                # Add iso contour if available
+                viewer.scene.add(contours.to_compas_network(), linecolor=Color.black(), linewidth=6,name= f"Mesh_Contour_{target_layer}")                        
         except Exception as e:
             print(f"Error adding field for layer {target_layer}: {e}")
+
+# min_sdf_bb_point = Point(*slicer.min_SDF_bb[target_layer])
+# max_sdf_bb_point = Point(*slicer.max_SDF_bb[target_layer])
+# viewer.scene.add(min_sdf_bb_point, pointcolor=Color.red(), pointsize=12, name=f"Min SDF BB {target_layer}")
+# viewer.scene.add(max_sdf_bb_point, pointcolor=Color.red(), pointsize=12, name=f"Max SDF BB {target_layer}")
 
 print(f"\nVisualization complete!")
 print(f"Showing:")
@@ -255,6 +314,18 @@ print(f"- Center points for each layer (red points)")
 print(f"- First points of each contour (green points)")
 print(f"- Field mesh for layer {target_layer}")
 
+# Set camera position and target
+# Position the camera at a specific location [x, y, z]
+camera_position = [2.0, -3.0, 2.5]  # Adjust these values as needed
+camera_target = [0.0, 0.0, 0.0]     # Point the camera is looking at
+
+# Configure the camera before showing the viewer
+viewer.renderer.camera.position.set(camera_position[0], camera_position[1], camera_position[2])
+viewer.renderer.camera.target.set(camera_target[0], camera_target[1], camera_target[2])
+
+
+# Remove the grid
+viewer.config.renderer.show_grid = False
 
 viewer.show()
 

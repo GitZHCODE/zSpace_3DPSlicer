@@ -118,7 +118,8 @@ class zGraph:
         Parameters
         ----------
         tMatrix : list or numpy.ndarray
-            4x4 transformation matrix in column-major format
+            4x4 transformation matrix. Can be in row-major or column-major format.
+            If using zUtils.plane_to_plane_correct(), will be automatically converted.
             
         Returns
         -------
@@ -131,11 +132,30 @@ class zGraph:
         elif tMatrix.dtype != np.float32:
             tMatrix = tMatrix.astype(np.float32)
         
-        # Ensure matrix is 1D array of 16 elements
-        if tMatrix.size != 16:
-            return False
+        # Ensure matrix is 4x4
+        if tMatrix.shape != (4, 4):
+            if tMatrix.size == 16:
+                tMatrix = tMatrix.reshape(4, 4)
+            else:
+                return False
+        
+        # Check if this looks like a correct row-major matrix that needs conversion
+        # A correct transformation matrix has translation in the last column [0-2][3]
+        # The transposed (incorrect) version has translation in the last row [3][0-2]
+        has_translation_in_column = abs(tMatrix[0, 3]) > 1e-6 or abs(tMatrix[1, 3]) > 1e-6 or abs(tMatrix[2, 3]) > 1e-6
+        has_translation_in_row = abs(tMatrix[3, 0]) > 1e-6 or abs(tMatrix[3, 1]) > 1e-6 or abs(tMatrix[3, 2]) > 1e-6
+        
+        if has_translation_in_column and not has_translation_in_row:
+            # This is a correct row-major matrix, convert to column-major for C++
+            tMatrix = tMatrix.T
+            print("zGraph.transform: Converted row-major matrix to column-major for C++ compatibility")
+        elif has_translation_in_row and not has_translation_in_column:
+            # This is already in the format C++ expects (transposed/column-major-like)
+            print("zGraph.transform: Using matrix as-is (legacy transposed format)")
+        else:
+            print("zGraph.transform: Warning - ambiguous matrix format, using as-is")
             
-        # Flatten if needed
+        # Flatten for C++ binding
         tMatrix = tMatrix.flatten()
         
         # Call C++ transform method

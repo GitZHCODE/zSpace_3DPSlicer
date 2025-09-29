@@ -3,7 +3,7 @@ zSlicer class for mesh slicing operations.
 """
 
 from math import dist
-from networkx import edges
+from networkx import center, edges
 import numpy as np
 from compas.geometry import Point, Vector, Frame, Plane, Polyline
 from compas.geometry import intersection_segment_plane
@@ -21,15 +21,17 @@ class zSlicer:
         self.sliceMesh = zMesh()
         self.frames = []
         self.contours = []  # Store as zGraph objects
+        self.polygon_contours = []  # Store slice contours
         self.fields = []  # Store as list of zField objects for each layer
         self.bracings = []  # Store as list of zGraph objects for each layer
         self.trims = []  # Store as list of zGraph objects for each layer
-        self.centers = []  # Store center points for each layer
         self.field_x_res = 50
         self.field_y_res = 50
         self.min_bb = [-2.0, -2.0, 0.0]
         self.max_bb = [2.0, 2.0, 0.0]
-        self.center = [0, 0, 0]  # Keep for compatibility
+        self.min_SDF_bb = []  # SDF bounding box minimum for each layer
+        self.max_SDF_bb = []  # SDF bounding box maximum for each layer
+        self.first_transform = None  # Store the first layer transform for reference
 
     def set_mesh(self, compas_mesh):
         """Set the mesh to be sliced.
@@ -48,8 +50,8 @@ class zSlicer:
         self.field_x_res = x_res
         self.field_y_res = y_res
 
-    def compute_sdf_center(self, scalar, x_res, y_res, method='interior_centroid'):
-        """Compute the geometry center of an SDF scalar field using SDF-aware methods.
+    def compute_sdf_bounding_box(self, scalar, x_res, y_res, layer_index):
+        """Compute the bounding box of an SDF scalar field based on zero threshold.
         
         Parameters
         ----------
@@ -59,35 +61,24 @@ class zSlicer:
             Resolution in x direction
         y_res : int
             Resolution in y direction
-        method : str
-            Method to use for center computation:
-            - 'interior_centroid': Center of mass of interior points (negative values)
-            - 'zero_level_centroid': Center of mass of zero-level set approximation
-            - 'medial_axis': Approximate medial axis center (most negative point)
-            - 'distance_weighted': Distance-weighted centroid focusing on interior
-            
-        Returns
-        -------
-        list
-            Center as [x, y, z] coordinates in world space
+        layer_index : int
+            Index of the layer to store the bounding box for
         """
         values = scalar
         if values is None:
-            return None
+            return
         
         # Handle both list and numpy array cases
         try:
             if len(values) == 0:
-                return None
+                return
         except TypeError:
-            return None
+            return
         
         # Convert to numpy array
         values_array = np.array(values)
         
         # Create coordinate grids
-        # Note: C++ field data appears to have x varying first, so we need to 
-        # reshape and interpret coordinates accordingly
         x_indices = np.arange(x_res)
         y_indices = np.arange(y_res)
         
@@ -100,147 +91,250 @@ class zSlicer:
         yy_flat = yy.flatten()
         values_flat = values_2d.flatten()
         
-        if method == 'interior_centroid':
-            # Use only interior points (negative values)
-            interior_mask = values_flat < 0
-            if not np.any(interior_mask):
-                # No interior points, fall back to zero-level method
-                return self.compute_sdf_center(scalar, x_res, y_res, 'zero_level_centroid')
-            
-            # Weight by absolute value (more negative = more interior)
-            weights = np.abs(values_flat[interior_mask])
-            x_coords = xx_flat[interior_mask]
-            y_coords = yy_flat[interior_mask]
-            
-        elif method == 'zero_level_centroid':
-            # Focus on points near the zero level set (boundary)
-            epsilon = 0.1  # Threshold for "near zero"
-            boundary_mask = np.abs(values_flat) <= epsilon
-            if not np.any(boundary_mask):
-                # No boundary points, use all points with equal weight
-                weights = np.ones_like(values_flat)
-                x_coords = xx_flat
-                y_coords = yy_flat
-            else:
-                # Weight inversely by distance to zero (closer to boundary = higher weight)
-                weights = 1.0 / (np.abs(values_flat[boundary_mask]) + 1e-6)
-                x_coords = xx_flat[boundary_mask]
-                y_coords = yy_flat[boundary_mask]
-                
-        elif method == 'medial_axis':
-            # Find the most negative point (deepest interior)
-            min_idx = np.argmin(values_flat)
-            center_x_index = xx_flat[min_idx]
-            center_y_index = yy_flat[min_idx]
-            
-            # Convert directly to normalized coordinates
-            center_x_normalized = center_x_index / (x_res - 1) if x_res > 1 else 0.5
-            center_y_normalized = center_y_index / (y_res - 1) if y_res > 1 else 0.5
-            
-            # Convert to world coordinates
-            bb_width = self.max_bb[0] - self.min_bb[0]
-            bb_height = self.max_bb[1] - self.min_bb[1]
-            world_x = self.min_bb[0] + center_x_normalized * bb_width
-            world_y = self.min_bb[1] + center_y_normalized * bb_height
-            world_z = self.min_bb[2]
-            
-            self.center = [world_x, world_y, world_z]
-            return
-            
-        elif method == 'distance_weighted':
-            # Weight points by their negative distance (interior focus)
-            # Convert SDF to weights: more negative = higher weight
-            weights = np.maximum(0, -values_flat)  # Only negative values contribute
-            if np.sum(weights) == 0:
-                # No negative values, fall back to simple centroid
-                weights = np.ones_like(values_flat)
+        # Focus on points near the zero level set (boundary)
+        epsilon = 0.001  # Threshold for "near zero"
+        boundary_mask = np.abs(values_flat) <= epsilon
+        if not np.any(boundary_mask):
+            # No boundary points, use all points
             x_coords = xx_flat
             y_coords = yy_flat
-            
         else:
-            raise ValueError(f"Unknown method: {method}")
+            x_coords = xx_flat[boundary_mask]
+            y_coords = yy_flat[boundary_mask]
         
-        # Compute weighted centroid
-        total_weight = np.sum(weights)
-        if total_weight == 0:
-            return None
+        if len(x_coords) == 0 or len(y_coords) == 0:
+            return
             
-        center_x_index = np.sum(x_coords * weights) / total_weight
-        center_y_index = np.sum(y_coords * weights) / total_weight
+        # Find min and max indices
+        min_x_index = np.min(x_coords)
+        max_x_index = np.max(x_coords)
+        min_y_index = np.min(y_coords)
+        max_y_index = np.max(y_coords)
         
         # Normalize to [0, 1] range
-        center_x_normalized = center_x_index / (x_res - 1) if x_res > 1 else 0.5
-        center_y_normalized = center_y_index / (y_res - 1) if y_res > 1 else 0.5
+        min_x_normalized = min_x_index / (x_res - 1) if x_res > 1 else 0.0
+        max_x_normalized = max_x_index / (x_res - 1) if x_res > 1 else 1.0
+        min_y_normalized = min_y_index / (y_res - 1) if y_res > 1 else 0.0
+        max_y_normalized = max_y_index / (y_res - 1) if y_res > 1 else 1.0
         
         # Convert to world coordinates
         bb_width = self.max_bb[0] - self.min_bb[0]
         bb_height = self.max_bb[1] - self.min_bb[1]
-        world_x = self.min_bb[0] + center_x_normalized * bb_width
-        world_y = self.min_bb[1] + center_y_normalized * bb_height
-        world_z = self.min_bb[2]
         
-        # Coordinates should now be correct without flipping
-        self.center = [world_x, world_y, world_z]
+        min_world_x = self.min_bb[0] + min_x_normalized * bb_width
+        max_world_x = self.min_bb[0] + max_x_normalized * bb_width
+        min_world_y = self.min_bb[1] + min_y_normalized * bb_height
+        max_world_y = self.min_bb[1] + max_y_normalized * bb_height
+        min_world_z = self.min_bb[2]
+        max_world_z = self.max_bb[2]
+        
+        # Ensure arrays are large enough for this layer
+        while len(self.min_SDF_bb) <= layer_index:
+            self.min_SDF_bb.append([0, 0, 0])
+        while len(self.max_SDF_bb) <= layer_index:
+            self.max_SDF_bb.append([0, 0, 0])
+        
+        # Store as arrays for this specific layer
+        self.min_SDF_bb[layer_index] = [min_world_x, min_world_y, min_world_z]
+        self.max_SDF_bb[layer_index] = [max_world_x, max_world_y, max_world_z]
 
-
-    def compute_bracing(self, layer_index, center_point):
-        """Compute bracing for a specific layer.
+    def compute_bracing_and_trim(self, layer_index, print_width, shape="line", line_number=3):
+        """Compute bracing and trim for a specific layer.
         
         Parameters
         ----------
         layer_index : int
             Index of the layer
-        center_point : list
-            Center point [x, y, z] for this layer
+        print_width : float
+            Width of the print path for trim computation
+        shape : str
+            Shape type for bracing (default: "line")
+        line_number : int
+            Number of lines to create for bracing (default: 3)
         """
-        # Ensure the bracings list is large enough
+        # Ensure the bracings and trims lists are large enough
         while len(self.bracings) <= layer_index:
             self.bracings.append(zGraph())
+        while len(self.trims) <= layer_index:
+            self.trims.append(zGraph())
             
         bracing_graph = zGraph()
-        vertices = [
-            self.min_bb[0], center_point[1], 0.0,  # First vertex: [min_x, center_y, 0]
-            self.max_bb[0], center_point[1], 0.0   # Second vertex: [max_x, center_y, 0]
-        ]
-        edges = [0, 1]  # Define edges by vertex indices
+        trim_graph = zGraph()
+        
+        # Line logic - create multiple horizontal lines distributed across the SDF bounding box
+        if shape == "line":
+            vertices = []
+            edges = []
+            
+            # Make sure we have a bounding box for this layer
+            if layer_index >= len(self.min_SDF_bb) or layer_index >= len(self.max_SDF_bb):
+                print(f"Warning: SDF bounding box not computed for layer {layer_index}")
+                return
+            
+            # Multiple lines distributed across SDF Y range
+            y_min = self.min_SDF_bb[layer_index][1]
+            y_max = self.max_SDF_bb[layer_index][1]
+            
+            # Distribute lines evenly across the Y range
+            for i in range(line_number):
+                if line_number > 1:
+                    y_pos = y_min + (y_max - y_min) * i / (line_number - 1)
+                else:
+                    y_pos = (y_min + y_max) / 2  # Use middle if only one line
+                
+                # Add vertices for this line
+                vertices.extend([
+                    self.min_SDF_bb[layer_index][0], y_pos, 0.0,  # Start of line
+                    self.max_SDF_bb[layer_index][0], y_pos, 0.0   # End of line
+                ])
+            
+            # Create sequential edge connections [0,1,2,3,4,5] for line_number=3
+            for i in range(0, line_number * 2 - 2, 2):
+                edges.extend([i, i + 1])
+            # edges = [0,1,2,3,4,5]
+        
+        elif shape == "Y":
+            vertices = []
+            edges = []
+            
+            # Make sure we have a bounding box for this layer
+            if layer_index >= len(self.min_SDF_bb) or layer_index >= len(self.max_SDF_bb):
+                print(f"Warning: SDF bounding box not computed for layer {layer_index}")
+                return
+            
+            # Y shape logic - fixed positions for now
+            vertices.extend([
+                self.min_SDF_bb[layer_index][0], self.min_SDF_bb[layer_index][1], 0.0,  # Bottom left 0
+                self.max_SDF_bb[layer_index][0], self.min_SDF_bb[layer_index][1], 0.0,   # Bottom right 1
+                (self.min_SDF_bb[layer_index][0] + self.max_SDF_bb[layer_index][0]) / 2,(self.min_SDF_bb[layer_index][1] + self.max_SDF_bb[layer_index][1]) / 2,0.0,  # Center 2
+                (self.min_SDF_bb[layer_index][0] + self.max_SDF_bb[layer_index][0]) / 2, self.max_SDF_bb[layer_index][1], 0.0,  # Top center 3
+            ])
+
+            edges.extend([0, 2, 1, 2, 3, 2])  # Connect bottom left to top center to bottom right
+
+        elif shape == "diagonal":
+            vertices = []
+            edges = []
+            
+            # Make sure we have a bounding box for this layer
+            if layer_index >= len(self.min_SDF_bb) or layer_index >= len(self.max_SDF_bb):
+                print(f"Warning: SDF bounding box not computed for layer {layer_index}")
+                return
+            
+            # Diagonal line from bottom-left to top-right
+            vertices.extend([
+                self.min_SDF_bb[layer_index][0], self.min_SDF_bb[layer_index][1], 0.0,  # Bottom left
+                self.max_SDF_bb[layer_index][0], (self.max_SDF_bb[layer_index][1]+self.min_SDF_bb[layer_index][1]) / 2, 0.0,   # right middle
+                self.min_SDF_bb[layer_index][0], self.max_SDF_bb[layer_index][1], 0.0   # Top left
+            ])
+            edges.extend([0, 1, 1, 2])
+            
+        # Create bracing graph
         vertices_array = np.array(vertices, dtype=np.float64)
         edges_array = np.array(edges, dtype=np.int32)
         bracing_graph.create_graph(vertices_array, edges_array)
         self.bracings[layer_index] = bracing_graph
-
-    def compute_trim(self, print_width, contour_index, center_point):
-        """Compute trim for a specific layer.
         
-        Parameters
-        ----------
-        print_width : float
-            Width of the print path for trim computation
-        contour_index : int
-            Index of the contour
-        center_point : list
-            Center point [x, y, z] for this layer
-        """
-        # Ensure the trims list is large enough
-        while len(self.trims) <= contour_index:
-            self.trims.append(zGraph())
+        # Create trim graph based on bracing edges
+        trim_vertices = []
+        trim_edges = []
+        
+        # Process bracing edges in pairs to create line segments
+        for i in range(0, len(edges), 2):
+            if i + 1 < len(edges):
+                # Get the two vertex indices that form this edge
+                v1_idx = edges[i]
+                v2_idx = edges[i + 1]
+                
+                # Get vertex coordinates (each vertex has 3 coordinates)
+                v1 = [vertices[v1_idx * 3], vertices[v1_idx * 3 + 1], vertices[v1_idx * 3 + 2]]
+                v2 = [vertices[v2_idx * 3], vertices[v2_idx * 3 + 1], vertices[v2_idx * 3 + 2]]
+                # Calculate point along the line segment (0.45 or 0.55 based on staggering)
+                t = 0.7 if layer_index % 2 == 0 else 0.8
+                point_on_line = [
+                    v1[0] + t * (v2[0] - v1[0]),
+                    v1[1] + t * (v2[1] - v1[1]),
+                    v1[2] + t * (v2[2] - v1[2])
+                ]
+                
+                # Calculate perpendicular direction (rotate 90 degrees in XY plane)
+                line_dir = [v2[0] - v1[0], v2[1] - v1[1], 0]
+                line_length = (line_dir[0]**2 + line_dir[1]**2)**0.5
+                if line_length > 0:
+                    # Normalize the line direction
+                    line_dir = [line_dir[0]/line_length, line_dir[1]/line_length, 0]
+                    # Get perpendicular direction (rotate 90 degrees)
+                    perp_dir = [-line_dir[1], line_dir[0], 0]
+                    
+                    # Create trim line segment perpendicular to bracing edge
+                    trim_start = [
+                        point_on_line[0] + perp_dir[0] * 2 * print_width,
+                        point_on_line[1] + perp_dir[1] * 2 * print_width,
+                        0.0
+                    ]
+                    trim_end = [
+                        point_on_line[0] - perp_dir[0] * 2 * print_width,
+                        point_on_line[1] - perp_dir[1] * 2 * print_width,
+                        0.0
+                    ]
+                    
+                    # Add trim vertices
+                    trim_start_idx = len(trim_vertices) // 3
+                    trim_vertices.extend(trim_start)
+                    trim_vertices.extend(trim_end)
+                    
+                    # Add trim edge
+                    trim_edges.extend([trim_start_idx, trim_start_idx + 1])
+        
+        # Add additional trim edge using specified bracing vertices
+        additional_v1 = [self.min_SDF_bb[0][0], self.min_SDF_bb[0][1], 0.0]  # Note: using min_SDF_bb[1] for Y coordinate
+        additional_v2 = [self.max_SDF_bb[0][0], self.min_SDF_bb[0][1], 0.0]  # Note: using min_SDF_bb[1] for Y coordinate
+
+        # Calculate point along the additional line segment (0.25 or 0.75 based on staggering)
+        #trim for sdf outline
+        t = 0.55 if layer_index % 2 == 0 else 0.6
+        additional_point_on_line = [
+            additional_v1[0] + t * (additional_v2[0] - additional_v1[0]),
+            additional_v1[1] + t * (additional_v2[1] - additional_v1[1]),
+            additional_v1[2] + t * (additional_v2[2] - additional_v1[2])
+        ]
+        
+        # Calculate perpendicular direction for additional trim
+        additional_line_dir = [additional_v2[0] - additional_v1[0], additional_v2[1] - additional_v1[1], 0]
+        additional_line_length = (additional_line_dir[0]**2 + additional_line_dir[1]**2)**0.5
+        if additional_line_length > 0:
+            # Normalize the line direction
+            additional_line_dir = [additional_line_dir[0]/additional_line_length, additional_line_dir[1]/additional_line_length, 0]
+            # Get perpendicular direction (rotate 90 degrees)
+            additional_perp_dir = [-additional_line_dir[1], additional_line_dir[0], 0]
             
-        trim_graph = zGraph()
-        #stagger logic
-        if(contour_index%2==0):
-            vertices = [
-                center_point[0]-print_width, self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]-print_width,  center_point[1]+print_width*4 , 0.0   # Second vertex: [center_x, max_y, 0]
+            # Create additional trim line segment perpendicular to the additional bracing edge
+            additional_trim_start = [
+                additional_point_on_line[0] + additional_perp_dir[0] * 3 * print_width,
+                additional_point_on_line[1] + additional_perp_dir[1] * 5 * print_width,
+                0.0
             ]
-        else:
-            vertices = [
-                center_point[0]+print_width,  self.min_bb[1], 0.0,  # First vertex: [center_x, min_y, 0]
-                center_point[0]+print_width,  center_point[1]+print_width*4, 0.0   # Second vertex: [center_x, max_y, 0]
+            additional_trim_end = [
+                additional_point_on_line[0] - additional_perp_dir[0] * 3 * print_width,
+                additional_point_on_line[1] - additional_perp_dir[1] * 2 * print_width,
+                0.0
             ]
-        edges = [0, 1]  # Define edges by vertex indices
-        vertices_array = np.array(vertices, dtype=np.float64)
-        edges_array = np.array(edges, dtype=np.int32)
-        trim_graph.create_graph(vertices_array, edges_array)
-        self.trims[contour_index] = trim_graph
+            
+            # Add additional trim vertices
+            additional_trim_start_idx = len(trim_vertices) // 3
+            trim_vertices.extend(additional_trim_start)
+            trim_vertices.extend(additional_trim_end)
+            
+            # Add additional trim edge
+            trim_edges.extend([additional_trim_start_idx, additional_trim_start_idx + 1])
+        
+        # Create trim graph
+        if trim_vertices:
+            trim_vertices_array = np.array(trim_vertices, dtype=np.float64)
+            trim_edges_array = np.array(trim_edges, dtype=np.int32)
+            trim_graph.create_graph(trim_vertices_array, trim_edges_array)
+        
+        self.trims[layer_index] = trim_graph
 
     def slice(self, start_plane, end_plane, print_height, start_plane_offset=0.01, end_plane_offset=0.01):
         """Slice the mesh using COMPAS edge-plane intersection and convert results to zGraph objects.
@@ -312,6 +406,7 @@ class zSlicer:
         print(f"Applied offsets: start_plane_offset={start_plane_offset}, end_plane_offset={end_plane_offset}")
             
         self.frames = []
+        self.polygon_contours = []
         self.contours = []
         
         # Use the interpolate_plane function from zUtils with adjusted planes
@@ -334,12 +429,13 @@ class zSlicer:
             if zgraph is not None and zgraph.get_vertex_count() > 0:
                 if zgraph is not None:
 
+                    self.polygon_contours.append(zgraph)
                     self.contours.append(zgraph)
                 else:
-                    self.contours.append(None)
+                    self.polygon_contours.append(None)
             else:
-                self.contours.append(None)
-    
+                self.polygon_contours.append(None)
+
     def _manual_mesh_plane_intersection(self, compas_mesh, plane_origin, plane_normal):
         """Manual mesh-plane intersection using COMPAS edge-plane intersections.
         
@@ -434,7 +530,7 @@ class zSlicer:
             print(f"Error in manual mesh-plane intersection: {e}")
             return None
     
-    def update_contour(self, index, print_width):
+    def update_contour(self, index, print_width,shape="line", line_number=3):
         """Update a specific contour by transforming it to frame coordinates, offsetting, and transforming back.
         
         Parameters
@@ -444,13 +540,13 @@ class zSlicer:
         print_width : float
             Width of the print path
         """
-        if not self.frames or not self.contours:
+        if not self.frames or not self.polygon_contours:
             return
-            
-        if index >= len(self.contours) or index >= len(self.frames):
+
+        if index >= len(self.polygon_contours) or index >= len(self.frames):
             return
-            
-        contour = self.contours[index]
+
+        contour = self.polygon_contours[index]
         if contour is None:
             return
 
@@ -462,12 +558,17 @@ class zSlicer:
 
         frame = self.frames[index]
         
-        # Get the transformation matrix for this frame
+        # Get the transformation matrix for this frame using CORRECT transformations
+        # Use the corrected functions that handle matrices properly
         tMatrix = zUtils.plane_to_plane(frame, Frame.worldXY())
         tMatrix_back = zUtils.plane_to_plane(Frame.worldXY(), frame)
+        tMatrix_to_first = zUtils.plane_to_plane( frame,self.frames[0])
+        if index == 0:
+            self.first_transform = tMatrix # get the first layer transform for reference
 
         # Transform the zGraph to world coordinates
         contour.transform(tMatrix)
+        self.polygon_contours[index] = contour
 
         # Create field for this layer
         field = self.fields[index]
@@ -482,15 +583,12 @@ class zSlicer:
             print(f"Warning: scalars is empty for layer {index}, skipping update")
             return
 
-        # Compute SDF-aware center using different methods
-        # Method 1: Interior centroid (recommended for most SDF cases)
-        self.compute_sdf_center(scalars, self.field_x_res, self.field_y_res, 'interior_centroid')
+
+        # Compute SDF bounding box for this layer
+        self.compute_sdf_bounding_box(scalars, self.field_x_res, self.field_y_res, index)
         
-        # Store the center for this layer
-        self.centers[index] = self.center.copy()
-        
-        self.compute_bracing(index, self.centers[index])
-        self.compute_trim(print_width, index, self.centers[index])
+        # Compute bracing and trim together
+        self.compute_bracing_and_trim(index, print_width, shape, line_number)
 
         scalars_offseted_0 = scalars + 0.5 * print_width
         scalars_offseted_1 = scalars + 1.5 * print_width
@@ -505,7 +603,7 @@ class zSlicer:
         print(f"Scalars bracing trimmed 1 range: [{np.min(scalars_bracing_trimmed_1):.3f}, {np.max(scalars_bracing_trimmed_1):.3f}]")
 
 
-        scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.5 * 0.5, False) #*0.9 to make sure tips touches
+        scalars_trim = field.get_scalars_graph_edge_distance(self.trims[index], print_width * 0.5, False) #*0.9 to make sure tips touches
         print(f"Scalars trim range: [{np.min(scalars_trim):.3f}, {np.max(scalars_trim):.3f}]")
 
         result_scalars = field.boolean_subtract(scalars_bracing_trimmed_1, scalars_trim, False)
@@ -516,46 +614,21 @@ class zSlicer:
             # Use the original scalars as fallback
             result_scalars = scalars
         
-        try:
-            result_scalars_array = np.array(result_scalars)
-            if len(result_scalars_array) == 0:
-                print(f"Warning: result_scalars is empty for layer {index}")
-                # Use the original scalars as fallback
-                result_scalars = scalars
-                result_scalars_array = np.array(result_scalars)
-            
-            # Check for invalid values
-            if np.any(np.isnan(result_scalars_array)) or np.any(np.isinf(result_scalars_array)):
-                print(f"Warning: result_scalars contains NaN or Inf values for layer {index}")
-                # Replace invalid values with 0
-                result_scalars_array = np.nan_to_num(result_scalars_array, nan=0.0, posinf=0.0, neginf=0.0)
-                result_scalars = result_scalars_array.tolist()
-            
-            if len(result_scalars_array) > 0:
-                print(f"Layer {index}: result_scalars range: [{np.min(result_scalars_array):.3f}, {np.max(result_scalars_array):.3f}]")
-            
-        except Exception as e:
-            print(f"Error processing result_scalars for layer {index}: {e}")
-            # Use original scalars as fallback
-            result_scalars = scalars
 
         field.set_field_values(result_scalars)
         field.smooth_field(num_smooth=1)
-        contour = field.get_iso_contour_direct(0.0)
-        contour.merge_vertices(0.005)
+        contour = field.get_iso_contour(0.0)
+        # contour = field.get_iso_contour_direct(0.0)
+        # contour.merge_vertices(0.005)
         self.contours[index] = contour
         self.contours[index].transform(tMatrix_back)
-        field.get_iso_contour(0)
+        # self.contours[index].transform(self.first_transform)  # apply first layer transform to all layers for consistency
+        # self.contours[index].transform(tMatrix_to_first)  # apply first layer transform to all layers for consistency
+        # field.get_iso_contour(0)
         self.fields[index] = field
-        #transform back the center point
-        from compas.geometry import Transformation
-        center_pt = Point(self.centers[index][0], self.centers[index][1], self.centers[index][2])
-        # Use COMPAS Transformation for Point transformation instead of raw matrix
-        transformation_back = Transformation.from_frame_to_frame(Frame.worldXY(), frame)
-        center_pt.transform(transformation_back)
-        self.centers[index] = [center_pt.x, center_pt.y, center_pt.z]
 
-    def update_all_contours(self, print_width):
+
+    def update_all_contours(self, print_width,shape="line", line_number=3):
         """Update all contours at once and store all geometries.
         
         Parameters
@@ -563,17 +636,17 @@ class zSlicer:
         print_width : float
             Width of the print path (formerly called 'dist')
         """
-        print(f"Updating all {len(self.contours)} contours with print width {print_width}")
+        print(f"Updating all {len(self.polygon_contours)} contours with print width {print_width}")
         
         # Initialize storage lists to ensure they're the right size
         self.fields = []
         self.bracings = []
         self.trims = []
         self.centers = []
-        
-        for i in range(len(self.contours)):
-            if self.contours[i] is not None:
-                self.update_contour(i, print_width)
+
+        for i in range(len(self.polygon_contours)):
+            if self.polygon_contours[i] is not None:
+                self.update_contour(i, print_width, shape, line_number)
                 print(f"Updated contour {i}")
             else:
                 # Add empty placeholders for None contours
@@ -669,74 +742,11 @@ class zSlicer:
                 network = contour.to_compas_network()
                 
                 # Get all vertices with their positions
-                vertices_with_distances = []
+                ordered_vertices = []
                 for node in network.nodes():
                     xyz = network.node_attributes(node, 'xyz')
                     if xyz:
-                        vertex_pos = [xyz[0], xyz[1], xyz[2]]
-                        # Calculate distance to SDF center
-                        dist_to_center = math.sqrt(
-                            (xyz[0] - current_center[0])**2 + 
-                            (xyz[1] - current_center[1])**2 + 
-                            (xyz[2] - current_center[2])**2
-                        )
-                        vertices_with_distances.append((node, vertex_pos, dist_to_center))
-                
-                # Sort vertices by distance to center (closest first for seam point)
-                vertices_with_distances.sort(key=lambda x: x[2])
-                
-                # Reorder vertices starting from the closest to center (seam point)
-                if vertices_with_distances:
-                    seam_node = vertices_with_distances[0][0]
-                    
-                    # Build ordered vertex list starting from seam point
-                    ordered_vertices = []
-                    visited = set()
-                    current_node = seam_node
-                    
-                    # Try to build a connected path from the seam point
-                    while current_node is not None and current_node not in visited:
-                        visited.add(current_node)
-                        xyz = network.node_attributes(current_node, 'xyz')
-                        if xyz:
-                            ordered_vertices.append([xyz[0], xyz[1], xyz[2]])
-                        
-                        # Find next connected node that hasn't been visited
-                        next_node = None
-                        for neighbor in network.neighbors(current_node):
-                            if neighbor not in visited:
-                                next_node = neighbor
-                                break
-                        current_node = next_node
-                    
-                    # If we didn't get all vertices, add the remaining ones
-                    if len(ordered_vertices) < len(vertices_with_distances):
-                        for node, vertex_pos, _ in vertices_with_distances:
-                            if node not in visited:
-                                ordered_vertices.append(vertex_pos)
-                    # updates contour vertices to new ordering
-                    if ordered_vertices:
-                        # Flatten vertex positions for zGraph
-                        new_contour = zGraph()
-                        vertices_flat = []
-                        for vertex_pos in ordered_vertices:
-                            vertices_flat.extend([vertex_pos[0], vertex_pos[1], vertex_pos[2]])
-                        
-                        # Create edges connecting consecutive vertices in a loop
-                        edges_flat = []
-                        num_vertices = len(ordered_vertices)
-                        for j in range(num_vertices):
-                            next_idx = (j + 1) % num_vertices  # Loop back to 0 at the end
-                            edges_flat.extend([j, next_idx])
-                        
-                        # Update the contour using zGraph methods
-                        vertices_array = np.array(vertices_flat, dtype=np.float64)
-                        edges_array = np.array(edges_flat, dtype=np.int32)
-                        new_contour.create_graph(vertices_array, edges_array)
-                        self.contours[i] = new_contour
-
-                else:
-                    ordered_vertices = []
+                        ordered_vertices.append([xyz[0], xyz[1], xyz[2]])
                 
                 # Create print plane data for each vertex
                 print_planes = []

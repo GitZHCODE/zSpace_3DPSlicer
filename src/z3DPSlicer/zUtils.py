@@ -170,10 +170,86 @@ def plane_to_plane(from_plane, to_plane):
     # Compute the final transformation: to_frame * from_frame^(-1)
     tMatrix = multiply_matrices(to_matrix, from_inverse)
 
+    # NOTE: This transpose is kept for compatibility with existing C++ bindings
+    # The C++ side expects this transposed format, even though it's mathematically incorrect
     transformation = Transformation(tMatrix)
     transformation.transpose()
 
     return transformation.matrix
+
+def plane_to_plane_correct(from_plane, to_plane):
+    """Compute CORRECT transformation matrix to transform from one plane to another.
+    This is the mathematically correct version without the transpose bug.
+    Use this for COMPAS mesh transformations.
+    
+    Parameters
+    ----------
+    from_plane : compas.geometry.Frame or compas.geometry.Plane
+        The source plane/frame
+    to_plane : compas.geometry.Frame or compas.geometry.Plane
+        The target plane/frame
+        
+    Returns
+    -------
+    list
+        4x4 transformation matrix (correct format for COMPAS)
+    """
+    from compas.geometry import Transformation
+    # Create transformation from world to from_frame
+    from_transform = Transformation.from_frame(from_plane)
+    
+    # Create transformation from world to to_frame
+    to_transform = Transformation.from_frame(to_plane)
+    
+    # The transformation from from_frame to to_frame is:
+    # to_frame * from_frame^(-1)
+    from compas.geometry import matrix_inverse, multiply_matrices
+    
+    # Get the transformation matrices
+    from_matrix = from_transform.matrix
+    to_matrix = to_transform.matrix
+    
+    # Compute inverse of from_frame transformation
+    from_inverse = matrix_inverse(from_matrix)
+    
+    # Compute the final transformation: to_frame * from_frame^(-1)
+    tMatrix = multiply_matrices(to_matrix, from_inverse)
+
+    # Return the correct matrix without transpose
+    return tMatrix
+
+def plane_to_plane_for_cpp(from_plane, to_plane):
+    """Compute transformation matrix for C++ bindings that expect column-major format.
+    This fixes the transpose issue by using the correct mathematical transformation
+    but converting to column-major format for C++ compatibility.
+    
+    Parameters
+    ----------
+    from_plane : compas.geometry.Frame or compas.geometry.Plane
+        The source plane/frame
+    to_plane : compas.geometry.Frame or compas.geometry.Plane
+        The target plane/frame
+        
+    Returns
+    -------
+    list
+        4x4 transformation matrix in column-major format for C++ bindings
+    """
+    from compas.geometry import Transformation
+    import numpy as np
+    
+    # Get the mathematically correct transformation
+    correct_matrix = plane_to_plane_correct(from_plane, to_plane)
+    
+    # Convert to column-major format for C++ bindings
+    # This is what the C++ side actually expects
+    correct_array = np.array(correct_matrix, dtype=np.float32)
+    column_major_flattened = correct_array.T.flatten()
+    
+    # Convert back to 4x4 matrix in the format C++ interprets correctly
+    column_major_matrix = column_major_flattened.reshape(4, 4).tolist()
+    
+    return column_major_matrix
 
 def get_inversed_tMatrix(tMatrix):
     """Get the inverse of a transformation matrix.
