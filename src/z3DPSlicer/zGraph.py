@@ -111,53 +111,81 @@ class zGraph:
                     network.add_edge(start_idx, end_idx)
         
         return network
-
     def transform(self, tMatrix):
         """Transform the graph vertices using a transformation matrix.
         
         Parameters
         ----------
         tMatrix : list or numpy.ndarray
-            4x4 transformation matrix. Can be in row-major or column-major format.
-            If using zUtils.plane_to_plane_correct(), will be automatically converted.
+            4x4 transformation matrix. Should be in standard COMPAS format (row-major).
+            Use zUtils.plane_to_plane_correct() for correct transformations.
             
         Returns
         -------
         bool
             True if transformation was successful, False otherwise
         """
-        # Convert tMatrix to numpy array if it's a list
-        if isinstance(tMatrix, list):
-            tMatrix = np.array(tMatrix, dtype=np.float32)
-        elif tMatrix.dtype != np.float32:
-            tMatrix = tMatrix.astype(np.float32)
+        from . import zUtils
+        import numpy as np
         
-        # Ensure matrix is 4x4
-        if tMatrix.shape != (4, 4):
-            if tMatrix.size == 16:
-                tMatrix = tMatrix.reshape(4, 4)
-            else:
-                return False
-        
-        # Check if this looks like a correct row-major matrix that needs conversion
-        # A correct transformation matrix has translation in the last column [0-2][3]
-        # The transposed (incorrect) version has translation in the last row [3][0-2]
-        has_translation_in_column = abs(tMatrix[0, 3]) > 1e-6 or abs(tMatrix[1, 3]) > 1e-6 or abs(tMatrix[2, 3]) > 1e-6
-        has_translation_in_row = abs(tMatrix[3, 0]) > 1e-6 or abs(tMatrix[3, 1]) > 1e-6 or abs(tMatrix[3, 2]) > 1e-6
-        
-        if has_translation_in_column and not has_translation_in_row:
-            # This is a correct row-major matrix, convert to column-major for C++
-            tMatrix = tMatrix.T
-            print("zGraph.transform: Converted row-major matrix to column-major for C++ compatibility")
-        elif has_translation_in_row and not has_translation_in_column:
-            # This is already in the format C++ expects (transposed/column-major-like)
-            print("zGraph.transform: Using matrix as-is (legacy transposed format)")
-        else:
-            print("zGraph.transform: Warning - ambiguous matrix format, using as-is")
+        try:
+            # Use the new helper function to prepare the matrix correctly
+            prepared_matrix = zUtils.prepare_matrix_for_zspace_cpp(tMatrix)
+            print("zGraph.transform: Matrix prepared for zSpace C++ bindings")
             
-        # Flatten for C++ binding
-        tMatrix = tMatrix.flatten()
-        
-        # Call C++ transform method
-        return self.zgraph.transform(tMatrix) 
+            # Call C++ transform method with the prepared matrix
+            return self.zgraph.transform(prepared_matrix)
+            
+        except Exception as e:
+            print(f"zGraph.transform: Error preparing matrix: {e}")
+            
+            # Fallback to the old method with detection logic
+            # Convert tMatrix to numpy array if it's a list
+            if isinstance(tMatrix, list):
+                tMatrix = np.array(tMatrix, dtype=np.float32)
+            elif tMatrix.dtype != np.float32:
+                tMatrix = tMatrix.astype(np.float32)
+            
+            # Ensure matrix is 4x4
+            if tMatrix.shape != (4, 4):
+                if tMatrix.size == 16:
+                    tMatrix = tMatrix.reshape(4, 4)
+                else:
+                    return False
+            
+            # Check if this looks like a correct row-major matrix that needs conversion
+            # A correct transformation matrix has:
+            # - Translation in the last column [0-2][3] 
+            # - Bottom row should be [0, 0, 0, 1]
+            # The transposed (incorrect) version has translation in the last row [3][0-2]
+            
+            has_translation_in_column = abs(tMatrix[0, 3]) > 1e-6 or abs(tMatrix[1, 3]) > 1e-6 or abs(tMatrix[2, 3]) > 1e-6
+            has_translation_in_row = abs(tMatrix[3, 0]) > 1e-6 or abs(tMatrix[3, 1]) > 1e-6 or abs(tMatrix[3, 2]) > 1e-6
+            bottom_row_correct = abs(tMatrix[3, 3] - 1.0) < 1e-6  # Should be 1
+            
+            # Check if this is a standard homogeneous transformation matrix (row-major, COMPAS format)
+            if has_translation_in_column and bottom_row_correct and not has_translation_in_row:
+                # This is a correct row-major matrix from plane_to_plane_correct, convert to column-major for C++
+                tMatrix = tMatrix.T
+                print("zGraph.transform: Converted correct row-major matrix to column-major for C++ compatibility")
+            elif has_translation_in_row and not has_translation_in_column:
+                # This is already in the legacy transposed format that C++ expects
+                print("zGraph.transform: Using matrix as-is (legacy transposed format)")
+            elif not has_translation_in_column and not has_translation_in_row:
+                # This might be an identity or rotation-only matrix
+                print("zGraph.transform: No significant translation detected, using matrix as-is")
+            else:
+                # This could be a complex transformation or the detection failed
+                # Default to assuming it's a correct COMPAS matrix that needs transposing
+                if bottom_row_correct:
+                    tMatrix = tMatrix.T
+                    print("zGraph.transform: Assuming correct COMPAS matrix format, converted to column-major for C++")
+                else:
+                    print("zGraph.transform: Warning - unusual matrix format, using as-is")
+                    
+            # Flatten for C++ binding
+            tMatrix = tMatrix.flatten()
+            
+            # Call C++ transform method
+            return self.zgraph.transform(tMatrix) 
     
