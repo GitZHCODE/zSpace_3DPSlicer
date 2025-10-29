@@ -190,7 +190,7 @@ class zSlicer:
                 ])
             
             # Create sequential edge connections [0,1,2,3,4,5] for line_number=3
-            for i in range(0, line_number * 2, 2):
+            for i in range(0, line_number * 2 - 2, 2):
                 edges.extend([i, i + 1])
             # edges = [0,1,2,3,4,5]
         
@@ -231,8 +231,6 @@ class zSlicer:
             edges.extend([0, 1, 1, 2])
             
         # Create bracing graph
-        print(f"vertices: {vertices}, edges: {edges}")
-
         vertices_array = np.array(vertices, dtype=np.float64)
         edges_array = np.array(edges, dtype=np.int32)
         bracing_graph.create_graph(vertices_array, edges_array)
@@ -563,9 +561,9 @@ class zSlicer:
         
         # Get the transformation matrix for this frame using CORRECT transformations
         # Use the corrected functions that handle matrices properly
-        tMatrix = zUtils.plane_to_plane_correct(frame, Frame.worldXY())
-        tMatrix_back = zUtils.plane_to_plane_correct(Frame.worldXY(), frame)
-        # tMatrix_to_first = zUtils.plane_to_plane_correct(self.frames[0], frame)
+        tMatrix = zUtils.plane_to_plane(frame, Frame.worldXY())
+        tMatrix_back = zUtils.plane_to_plane(Frame.worldXY(), frame)
+        tMatrix_to_first = zUtils.plane_to_plane( frame,self.frames[0])
         if index == 0:
             self.first_transform = tMatrix # get the first layer transform for reference
 
@@ -621,28 +619,15 @@ class zSlicer:
         field.set_field_values(result_scalars)
         field.smooth_field(num_smooth=1)
         contour = field.get_iso_contour(0.0)
-        print(f"Scalars after_getisocontour method: [{np.min(field.get_field_values()):.3f}, {np.max(field.get_field_values()):.3f}]")
         # contour = field.get_iso_contour_direct(0.0)
         # contour.merge_vertices(0.005)
         self.contours[index] = contour
-        
-        # Transform contour back to the frame's local coordinate system
         self.contours[index].transform(tMatrix_back)
-        
-        # # For proper layered visualization, transform each contour to align with the mesh coordinate system
-        # # but maintain relative positioning between layers
-        # if hasattr(self, 'first_transform') and self.first_transform is not None:
-        #     # Calculate the transformation from first frame to current frame
-        #     first_to_current = zUtils.plane_to_plane_correct(self.frames[0], self.frames[index])
-            
-        #     # Apply mesh alignment transformation
-        #     self.contours[index].transform(self.first_transform)
-            
-        #     # Then apply the relative positioning to maintain layer separation
-        #     self.contours[index].transform(first_to_current)
-        
+        # self.contours[index].transform(self.first_transform)  # apply first layer transform to all layers for consistency
+        # self.contours[index].transform(tMatrix_to_first)  # apply first layer transform to all layers for consistency
         # field.get_iso_contour(0)
         self.fields[index] = field
+
 
     def update_all_contours(self, print_width,shape="line", line_number=3):
         """Update all contours at once and store all geometries.

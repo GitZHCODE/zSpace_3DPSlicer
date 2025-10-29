@@ -251,40 +251,6 @@ def plane_to_plane_for_cpp(from_plane, to_plane):
     
     return column_major_matrix
 
-def prepare_matrix_for_zspace_cpp(tMatrix):
-    """Prepare a transformation matrix for use with zSpace C++ bindings.
-    
-    This function takes a standard COMPAS transformation matrix (row-major) and 
-    converts it to the format expected by the zSpace C++ bindings (column-major).
-    
-    Parameters
-    ----------
-    tMatrix : list or numpy.ndarray
-        4x4 transformation matrix in standard COMPAS format (row-major)
-        
-    Returns
-    -------
-    numpy.ndarray
-        4x4 transformation matrix prepared for C++ bindings (column-major, flattened)
-    """
-    import numpy as np
-    
-    # Convert to numpy array if needed
-    if isinstance(tMatrix, list):
-        tMatrix = np.array(tMatrix, dtype=np.float32)
-    elif tMatrix.dtype != np.float32:
-        tMatrix = tMatrix.astype(np.float32)
-    
-    # Ensure it's 4x4
-    if tMatrix.shape != (4, 4):
-        if tMatrix.size == 16:
-            tMatrix = tMatrix.reshape(4, 4)
-        else:
-            raise ValueError("Matrix must be 4x4")
-    
-    # Transpose to convert from row-major to column-major and flatten
-    return tMatrix.T.flatten()
-
 def get_inversed_tMatrix(tMatrix):
     """Get the inverse of a transformation matrix.
     

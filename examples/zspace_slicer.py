@@ -23,9 +23,10 @@ slicer = zSlicer()
 slicer.min_bb = [-0.5,-1.5, 0.0]
 slicer.max_bb = [0.5, 0.5, 0.0]
 slicer.init_field(200, 200) # Initialize field resolution
-print_height = 0.010  # Number of layers desired
+print_height = 0.2  # Number of layers desired
 print_width = 0.028  # Width of the print path
 is_original_position = True
+bracing_type = "Y"
 # contour_objects = []  ###buffer to store contour objects
 
 ###########################utils
@@ -159,7 +160,7 @@ def read_start_end_planes(filePath):
 # Initialize viewer
 viewer = Viewer()
 load_path="C:\\Users\\Wo.Lin\\source\\repos\\zSpace_3DPSlicer\\data\\blockMesh_23.json"
-
+output_path = "./data/blockMesh_23_contours.json"
 
 
 ###sliders
@@ -171,6 +172,17 @@ def on_printHeight_slider_change(value):
     slider_label.setText(f"Print Height: {print_height:.3f}")
     print(f"Slider value changed to: {print_height:.3f}")
 
+def on_bracing_slider_change(value):
+    global bracing_type
+    if value == 0:
+        bracing_type = "line"
+    elif value == 1:
+        bracing_type = "Y"
+    else:
+        bracing_type = "diagonal"
+    slider_bracing_label.setText(f"Bracing Type: {bracing_type}")
+    print(f"Bracing type changed to: {bracing_type}")
+
 # Create a custom widget with slider
 slider_widget = QWidget()
 slider_layout = QVBoxLayout()
@@ -178,16 +190,29 @@ slider_layout = QVBoxLayout()
 # Create label
 slider_label = QLabel(f"Print Height: {print_height:.2f}")
 slider_layout.addWidget(slider_label)
-
-# Create slider (range 1-100, representing 0.001-0.1)
+# Create label
+slider_bracing_label = QLabel(f"Bracing Type: {bracing_type}")
+slider_layout.addWidget(slider_bracing_label)
+# Create slider (range 10-200, representing 0.01-0.2)
 slider = QSlider(Qt.Orientation.Horizontal)
-slider.setMinimum(1)
-slider.setMaximum(100)
-slider.setValue(10)  # Default value 0.01
+slider.setMinimum(10)
+slider.setMaximum(200)
+slider.setValue(200)  # Default value 0.2
 slider.setTickPosition(QSlider.TickPosition.TicksBelow)
 slider.setTickInterval(1)
 slider.valueChanged.connect(on_printHeight_slider_change)
 slider_layout.addWidget(slider)
+
+# create bracing type
+slider_bracing = QSlider(Qt.Orientation.Horizontal)
+slider_bracing.setMinimum(0)
+slider_bracing.setMaximum(2)
+slider_bracing.setValue(0)  # Default value 0.5
+slider_bracing.setTickPosition(QSlider.TickPosition.TicksBelow)
+slider_bracing.setTickInterval(1)
+slider_bracing.valueChanged.connect(on_bracing_slider_change)
+
+slider_layout.addWidget(slider_bracing)
 
 slider_widget.setLayout(slider_layout)
 
@@ -196,7 +221,7 @@ slider_widget.setLayout(slider_layout)
 # Create a dock widget for the slider
 dock = QDockWidget("Print Params", viewer.ui.window.widget)
 dock.setWidget(slider_widget)
-viewer.ui.window.widget.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, dock)
+viewer.ui.window.widget.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
 
 ###################keypress event
 ############KEYTRIGGERED FUNCTION
@@ -301,7 +326,7 @@ def on_transform():
     transformed_objects = []
     for obj in viewer.scene.objects:
         # Get the underlying geometry and transform it
-        if hasattr(obj, '_item'):
+        if hasattr(obj, '_item') and obj.name != "Field":
             geometry = obj._item
             if hasattr(geometry, 'transform'):
                 geometry.transform(transformation)
@@ -322,40 +347,31 @@ def on_transform():
 
 def on_compute_SDF():
     """Compute SDF field when key is pressed."""
-    global slicer
+    global slicer, mesh
     if len(slicer.polygon_contours) == 0:
         print("Error: Not compute frames yet, press p.")
         return
     
-    slicer.update_all_contours(print_width,shape="Y")
+    slicer.update_all_contours(print_width,shape=bracing_type)
     print("SDF field computation complete.")
     
     # Remove only contour objects (selective removal)
-    objects_to_remove = []
-    objects_to_keep = []
     
-    for obj in viewer.scene.objects:
-        if "Contour" in obj.name:
-            objects_to_remove.append(obj)
-            print(f"Marking for removal: {obj.name}")
-        else:
-            objects_to_keep.append(obj)
-            print(f"Keeping: {obj.name}")
-    
-    # Remove marked objects from scene
-    for obj in objects_to_remove:
-        viewer.scene.remove(obj)
-    
-    # Clear buffer manager completely
-    viewer.renderer.buffer_manager.clear()
-    viewer.renderer.buffer_manager.objects.clear()
-    
-    # Re-add only the objects we want to keep
-    for obj in objects_to_keep:
-        viewer.renderer.buffer_manager.add_object(obj)
-    
-    print(f"Removed {len(objects_to_remove)} contour objects")
-    print(f"Kept {len(objects_to_keep)} objects")
+    if len(viewer.scene.objects) > 0:
+        # Remove all objects
+        for obj in list(viewer.scene.objects):
+            viewer.scene.remove(obj)
+            print(f"Removing: {obj.name}")
+        
+        # Clear and rebuild the buffer manager
+        viewer.renderer.buffer_manager.clear()
+        viewer.renderer.buffer_manager.objects.clear()  # Important: clear the objects dict too
+        print("Cleared scene and buffer manager")
+   
+    # mObj = viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=True, opacity=0.7, name="Input")
+    # mObj.init()
+    # viewer.renderer.buffer_manager.add_object(mObj)
+
     #     # Batch add all contours first
     # SDF_contour_objects = []
     for i, contour in enumerate(slicer.contours):
@@ -371,10 +387,55 @@ def on_compute_SDF():
             except Exception as e:
                 print(f"Error adding contour for layer {i}: {e}")
     
+
+    ######field mesh visualization
+        target_layer = 0
+    if target_layer < len(slicer.fields):
+        field = slicer.fields[target_layer]
+        if field is not None:
+            field_mesh = field.get_mesh().to_compas_mesh()
+            
+            # Get field values and create color mapping
+            values = field.get_field_values()
+
+            if values is not None and len(values) > 0:
+                values = np.array(values)
+                
+                # Create color mapping based on field values
+                threshold = 0.02
+                vertex_colors = {}
+                for idx, value in enumerate(values):
+                    if value > threshold:
+                        vertex_colors[idx] = Color.from_rgb255(220, 220, 220)
+                    elif value < -threshold:
+                        # Map value from -1.0 to -threshold into color from (0,40,240) to (180,200,255)
+                        t = min(max((value + 1.0) / (1.0 - threshold), 0.0), 1.0)  # Clamp t between 0 and 1
+                        r = int(0 + t * (180 - 0))
+                        g = int(40 + t * (200 - 40))
+                        b = int(240 + t * (255 - 240))
+                        vertex_colors[idx] = Color.from_rgb255(r, g, b)
+                    else:  # Between -threshold and threshold
+                        vertex_colors[idx] = Color.from_rgb255(240, 0, 140)
+                # Add field mesh to scene
+                fObj = viewer.scene.add(field_mesh, use_vertexcolors=True, pointcolor=vertex_colors, show_lines=False,name= f"Field")
+                fObj.init()
+                viewer.renderer.buffer_manager.add_object(fObj)
+
+                print(f"Added field mesh for layer {target_layer}")
+                
     # ONLY call these ONCE after all objects are added
     viewer.renderer.buffer_manager.create_buffers()
     viewer.renderer.update()
 
+def on_export_contours():
+    """Export contours to JSON when key is pressed."""
+    global slicer, print_width, output_path, print_height
+    if len(slicer.contours) == 0:
+        print("Error: No contours to export. Please compute frames first.")
+        return
+    
+    slicer.export_contours(output_path, print_width, print_height=print_height)
+    print(f"Exported contours to: {output_path}")
 
 # read mesh
 for key in ["r", "R"]:
@@ -398,6 +459,11 @@ for key in ["o", "O"]:
     sdf_event = KeyEvent(title="Compute SDF", key=key)
     sdf_event.triggered.connect(on_compute_SDF)
     viewer.eventmanager.key_events.append(sdf_event)
+
+for key in ["e", "E"]:
+    export_event = KeyEvent(title="Export Contours", key=key)
+    export_event.triggered.connect(on_export_contours)
+    viewer.eventmanager.key_events.append(export_event)
 #Transform to world xy
 def transform_to_world_xy(mesh, slicing_frame):
     # Apply transformation to mesh based on slicing frame
@@ -539,17 +605,17 @@ def transform_to_world_xy(mesh, slicing_frame):
 
 # Set camera position and target
 # Position the camera at a specific location [x, y, z]
-camera_position = [2.0, -3.0, 2.5]  # Adjust these values as needed
-# camera_position = [0,0, 2.5]  # Adjust these values as needed
-camera_target = [0.0, 0.0, 0.0]     # Point the camera is looking at
+# camera_position = [2.0, -3.0, 2.5]  # Adjust these values as needed
+# # camera_position = [0,0, 2.5]  # Adjust these values as needed
+# camera_target = [0.0, 0.0, 0.0]     # Point the camera is looking at
 
 # Configure the camera before showing the viewer
-viewer.renderer.camera.position.set(camera_position[0], camera_position[1], camera_position[2])
-viewer.renderer.camera.target.set(camera_target[0], camera_target[1], camera_target[2])
+# viewer.renderer.camera.position.set(camera_position[0], camera_position[1], camera_position[2])
+# viewer.renderer.camera.target.set(camera_target[0], camera_target[1], camera_target[2])
 
 
 # Remove the grid
-# viewer.config.renderer.show_grid = False
+viewer.config.renderer.show_grid = False
 
 viewer.show()
 
