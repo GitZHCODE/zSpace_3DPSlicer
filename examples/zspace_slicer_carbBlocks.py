@@ -1,14 +1,12 @@
 from os import name
 from tracemalloc import start
 import compas
-import os
 from compas_viewer import Viewer
 from compas_viewer.events import KeyEvent
 from compas.geometry import Point, Frame, Vector, Transformation
 from compas.datastructures import Mesh, Network
 from PySide6.QtWidgets import QSlider, QLabel, QVBoxLayout, QWidget, QDockWidget
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
 import numpy as np
 import json
 from compas.colors import Color
@@ -18,137 +16,25 @@ from compas.geometry import Translation
 
 
 ###########GLOBAL VARIABLES
-# Initialize viewer
-viewer = Viewer()
 mesh = None
 startPlane = None
 endPlane = None
 slicer = zSlicer()
-slicer.min_bb = [-0.5,-1.5, 0.0]
-slicer.max_bb = [0.5, 0.5, 0.0]
+slicer.min_bb = [-2,-2, 0.0]
+slicer.max_bb = [2, 2, 0.0]
 slicer.init_field(200, 200) # Initialize field resolution
 print_height = 0.2  # Number of layers desired
 print_width = 0.028  # Width of the print path
 is_original_position = True
-bracing_type = "line"
+bracing_type = "Y"
+load_mesh_path="./data/BlockMesh_carb4.obj"
+load_planes_path="./data/blockPlanes_carb4.json"
+output_path = "./data/blockMesh_4_carb_contours.json"
+
+
 # contour_objects = []  ###buffer to store contour objects
-load_path="C:\\Users\\Wo.Lin\\source\\repos\\zSpace_3DPSlicer\\data\\blockMesh_23.json"
-output_path = "./data/blockMesh_23_contours.json"
-
-
-
-##############viewer config
-# Remove the grid
-viewer.config.renderer.show_grid = False
-## Set application name and icon
-viewer.app.setApplicationDisplayName("zSpace_COMPAS viewer")
-viewer.app.setApplicationName("zSpace_COMPAS viewer")
-viewer.ui.window.widget.setWindowTitle("zSpace_COMPAS viewer")
-script_dir = os.path.dirname(os.path.abspath(__file__))
-icon_path = os.path.join(script_dir, "..", "documentation", "Assets", "zspaceIcon.png")
-viewer.app.setWindowIcon(QIcon(icon_path))
-
-# Set camera position and target
-# Position the camera at a specific location [x, y, z]
-camera_position = [2, -3, 2.5]  # Adjust these values as needed
-# camera_position = [0,0, 2.5]  # Adjust these values as needed
-camera_target = [0.0, 0.0, 0.0]     # Point the camera is looking at
-# Configure the camera before showing the viewer
-viewer.renderer.camera.position.set(camera_position[0], camera_position[1], camera_position[2])
-viewer.renderer.camera.target.set(camera_target[0], camera_target[1], camera_target[2])
 
 ###########################utils
-
-def _reset_buffer_manager_buffers(buffer_manager):
-    """Reinitialize viewer buffer manager arrays after manual clears."""
-    data_types = ["_points_data", "_lines_data", "_frontfaces_data", "_backfaces_data"]
-    for data_type in data_types:
-        buffer_manager.positions[data_type] = np.array([], dtype=np.float32)
-        buffer_manager.colors[data_type] = np.array([], dtype=np.float32)
-        buffer_manager.elements[data_type] = np.array([], dtype=np.int32)
-        if data_type in ("_frontfaces_data", "_backfaces_data"):
-            buffer_manager.elements[data_type + "_transparent"] = np.array([], dtype=np.int32)
-        buffer_manager.object_indices[data_type] = np.array([], dtype=np.float32)
-        buffer_manager.buffer_ids[data_type] = {}
-
-def read_mesh_from_zJSON(filePath):
-    """Load mesh data from a JSON created by zSpace and update self.mesh.
-    
-    Parameters
-    ----------
-    filePath : str
-        Path to the JSON file created by zSpace.
-    """
-
-    # Load the JSON data
-    with open(filePath, 'r') as file:
-        data = json.load(file)
-    
-    print(f"Loaded JSON data from: {filePath}")
-    
-    # Extract vertex positions from VertexAttributes
-    vertices = []
-    if "VertexAttributes" in data:
-        for attr_list in data["VertexAttributes"]:
-            # Each vertex has x,y,z at the beginning (based on C++ code)
-            # Different formats might have 3, 6, 9 or 15 values per vertex
-            if len(attr_list) >= 3:
-                x, y, z = attr_list[0:3]
-                vertices.append([x, y, z])
-    
-    # If no vertices were found in VertexAttributes, try another approach
-    if not vertices and "Vertices" in data:
-        # This is a fallback, exact structure depends on how zSpace stores mesh data
-        print("Using fallback vertex loading method")
-        vertices = data["Vertices"]
-        
-    # Extract faces from the JSON
-    faces = []
-    if "Faces" in data and "Halfedges" in data:
-        # Need to reconstruct faces from half-edge structure
-        face_start_halfedges = data["Faces"]
-        halfedges = data["Halfedges"]
-        
-        for face_he_idx in face_start_halfedges:
-            if face_he_idx == -1:
-                continue
-                
-            face_vertices = []
-            current_he_idx = face_he_idx
-            
-            # Follow halfedges to build the face loop
-            while True:
-                # Get vertex from halfedge
-                if current_he_idx >= 0 and current_he_idx < len(halfedges):
-                    halfedge = halfedges[current_he_idx]
-                    if len(halfedge) > 2:  # Ensure halfedge has vertex info
-                        vertex_idx = halfedge[2]  # Based on C++ code, vertex index is at position 2
-                        face_vertices.append(vertex_idx)
-                    
-                    # Move to next halfedge in the face
-                    current_he_idx = halfedge[1]  # Next halfedge index
-                    
-                    # Break if we've looped back to start
-                    if current_he_idx == face_he_idx:
-                        break
-                else:
-                    break
-            
-            if len(face_vertices) >= 3:
-                faces.append(face_vertices)
-    
-    # As a fallback, check if there's a more direct representation of faces
-    if not faces and "FaceIndices" in data:
-        faces = data["FaceIndices"]
-    
-    # Update self.mesh from vertices and faces
-    if vertices and faces:
-        print(f"Updating mesh with {len(vertices)} vertices and {len(faces)} faces")
-        return Mesh.from_vertices_and_faces(vertices, faces)
-    else:
-        print(f"Warning: Could not extract vertices and faces from JSON data")
-        print(f"Vertices found: {len(vertices)}, Faces found: {len(faces)}")
-        return Mesh()
 
 def read_start_end_planes(filePath):
     """Load start and end planes from a JSON created by zSpace.
@@ -169,8 +55,27 @@ def read_start_end_planes(filePath):
     with open(filePath, 'r') as file:
         data = json.load(file)
     
-    if "LeftPlanes" in data:
-        ###plane location in viewer is in correct for some reason, using frmae instead
+    # Check for new format with startPlane and endPlane
+    if "startPlane" in data and "endPlane" in data:
+        # Read start plane
+        start_data = data["startPlane"]
+        origin_start = Point(start_data["origin"][0], start_data["origin"][1], start_data["origin"][2])
+        xaxis_start = Vector(start_data["xaxis"][0], start_data["xaxis"][1], start_data["xaxis"][2])
+        yaxis_start = Vector(start_data["yaxis"][0], start_data["yaxis"][1], start_data["yaxis"][2])
+        startPlane = Frame(origin_start, xaxis_start, yaxis_start)
+        
+        # Read end plane
+        end_data = data["endPlane"]
+        origin_end = Point(end_data["origin"][0], end_data["origin"][1], end_data["origin"][2])
+        xaxis_end = Vector(end_data["xaxis"][0], end_data["xaxis"][1], end_data["xaxis"][2])
+        yaxis_end = Vector(end_data["yaxis"][0], end_data["yaxis"][1], end_data["yaxis"][2])
+        endPlane = Frame(origin_end, xaxis_end, yaxis_end)
+        
+        return startPlane, endPlane
+    
+    # Fall back to old format with LeftPlanes (matrix format)
+    elif "LeftPlanes" in data:
+        ###plane location in viewer is in correct for some reason, using frame instead
         if len(data["LeftPlanes"]) == 2:
             start_planes_data = data["LeftPlanes"][0]
             # print(f"Start plane data: {start_planes_data}")
@@ -191,8 +96,24 @@ def read_start_end_planes(filePath):
             print("Warning: LeftPlanes does not contain exactly two planes.")
             return None, None
     else:
-        print("Warning: LeftPlanes not found in JSON data.")
+        print("Warning: No plane data found in JSON (expected 'startPlane'/'endPlane' or 'LeftPlanes').")
         return None, None
+
+def _reset_buffer_manager_buffers(buffer_manager):
+    """Reinitialize viewer buffer manager arrays after manual clears."""
+    data_types = ["_points_data", "_lines_data", "_frontfaces_data", "_backfaces_data"]
+    for data_type in data_types:
+        buffer_manager.positions[data_type] = np.array([], dtype=np.float32)
+        buffer_manager.colors[data_type] = np.array([], dtype=np.float32)
+        buffer_manager.elements[data_type] = np.array([], dtype=np.int32)
+        if data_type in ("_frontfaces_data", "_backfaces_data"):
+            buffer_manager.elements[data_type + "_transparent"] = np.array([], dtype=np.int32)
+        buffer_manager.object_indices[data_type] = np.array([], dtype=np.float32)
+        buffer_manager.buffer_ids[data_type] = {}
+
+
+# Initialize viewer
+viewer = Viewer()
 
 
 ###sliders
@@ -239,7 +160,7 @@ slider_layout.addWidget(slider)
 slider_bracing = QSlider(Qt.Orientation.Horizontal)
 slider_bracing.setMinimum(0)
 slider_bracing.setMaximum(2)
-slider_bracing.setValue(0)  # Default value 1
+slider_bracing.setValue(0)  # Default value 0.5
 slider_bracing.setTickPosition(QSlider.TickPosition.TicksBelow)
 slider_bracing.setTickInterval(1)
 slider_bracing.valueChanged.connect(on_bracing_slider_change)
@@ -253,7 +174,7 @@ slider_widget.setLayout(slider_layout)
 # Create a dock widget for the slider
 dock = QDockWidget("Print Params", viewer.ui.window.widget)
 dock.setWidget(slider_widget)
-viewer.ui.window.widget.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, dock)
+viewer.ui.window.widget.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
 
 ###################keypress event
 ############KEYTRIGGERED FUNCTION
@@ -278,7 +199,7 @@ def on_read_mesh():
     # Load mesh and planes from JSON
     mesh = read_mesh_from_zJSON(load_path)
     startPlane, endPlane = read_start_end_planes(load_path)
-    mObj = viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=False, opacity=1, name="Input",facecolor=Color.from_rgb255(200,200,200))
+    mObj = viewer.scene.add(mesh, linecolor=Color.grey(), linewidth=1, show_lines=True, opacity=0.7, name="Input")
     mObj.init()
     viewer.renderer.buffer_manager.add_object(mObj)
     viewer.renderer.buffer_manager.create_buffers()
@@ -386,13 +307,12 @@ def on_transform():
 
 def on_compute_SDF():
     """Compute SDF field when key is pressed."""
-    global slicer, mesh,is_original_position
-    is_original_position = True
+    global slicer, mesh
     if len(slicer.polygon_contours) == 0:
         print("Error: Not compute frames yet, press p.")
         return
     
-    slicer.update_all_contours(print_width,shape=bracing_type,line_number=3)
+    slicer.update_all_contours(print_width,shape=bracing_type)
     print("SDF field computation complete.")
     
     # Remove only contour objects (selective removal)
@@ -646,12 +566,21 @@ def transform_to_world_xy(mesh, slicing_frame):
 
 # #####################fenjiexianjieshu
 
+# Set camera position and target
+# Position the camera at a specific location [x, y, z]
+# camera_position = [2.0, -3.0, 2.5]  # Adjust these values as needed
+# # camera_position = [0,0, 2.5]  # Adjust these values as needed
+# camera_target = [0.0, 0.0, 0.0]     # Point the camera is looking at
+
+# Configure the camera before showing the viewer
+# viewer.renderer.camera.position.set(camera_position[0], camera_position[1], camera_position[2])
+# viewer.renderer.camera.target.set(camera_target[0], camera_target[1], camera_target[2])
 
 
-
-
-
-
+# Remove the grid
+viewer.config.renderer.show_grid = False
 
 viewer.show()
+
+
 

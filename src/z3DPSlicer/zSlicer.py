@@ -175,23 +175,29 @@ class zSlicer:
             # Multiple lines distributed across SDF Y range
             y_min = self.min_SDF_bb[layer_index][1]
             y_max = self.max_SDF_bb[layer_index][1]
+            y_range = y_max - y_min
+            y_start = y_min + 0.2 * y_range
+            y_end = y_min + 0.8 * y_range
             
-            # Distribute lines evenly across the Y range
+            # Distribute lines evenly across the 0.2 to 0.8 portion of the range
             for i in range(line_number):
                 if line_number > 1:
-                    y_pos = y_min + (y_max - y_min) * i / (line_number - 1)
+                    y_pos = y_start + (y_end - y_start) * i / (line_number - 1)
                 else:
-                    y_pos = (y_min + y_max) / 2  # Use middle if only one line
+                    y_pos = 0.5 * (y_start + y_end)  # Use middle if only one line
                 
                 # Add vertices for this line
                 vertices.extend([
                     self.min_SDF_bb[layer_index][0], y_pos, 0.0,  # Start of line
                     self.max_SDF_bb[layer_index][0], y_pos, 0.0   # End of line
                 ])
+                print(f"Created vertices for layer {layer_index}: {vertices}")
             
             # Create sequential edge connections [0,1,2,3,4,5] for line_number=3
-            for i in range(0, line_number * 2 - 2, 2):
+            for i in range(0, line_number * 2, 2):
                 edges.extend([i, i + 1])
+            print(f"Created edges for layer {layer_index}: {edges}")
+
             # edges = [0,1,2,3,4,5]
         
         elif shape == "Y":
@@ -241,8 +247,9 @@ class zSlicer:
         trim_edges = []
         
         # Process bracing edges in pairs to create line segments
-        for i in range(0, len(edges), 2):
-            if i + 1 < len(edges):
+        edgeLength = len(edges)-2 if shape == "Y" else len(edges)
+        for i in range(0, edgeLength, 2):
+            if i + 1 < edgeLength:
                 # Get the two vertex indices that form this edge
                 v1_idx = edges[i]
                 v2_idx = edges[i + 1]
@@ -251,7 +258,9 @@ class zSlicer:
                 v1 = [vertices[v1_idx * 3], vertices[v1_idx * 3 + 1], vertices[v1_idx * 3 + 2]]
                 v2 = [vertices[v2_idx * 3], vertices[v2_idx * 3 + 1], vertices[v2_idx * 3 + 2]]
                 # Calculate point along the line segment (0.45 or 0.55 based on staggering)
-                t = 0.7 if layer_index % 2 == 0 else 0.8
+                stagger_min = 0.45 if shape == "line" else 0.7
+                stagger_max = 0.55 if shape == "line" else 0.8
+                t = stagger_max if layer_index % 2 == 0 else stagger_min
                 point_on_line = [
                     v1[0] + t * (v2[0] - v1[0]),
                     v1[1] + t * (v2[1] - v1[1]),
@@ -620,7 +629,7 @@ class zSlicer:
         field.smooth_field(num_smooth=1)
         contour = field.get_iso_contour(0.0)
         # contour = field.get_iso_contour_direct(0.0)
-        # contour.merge_vertices(0.005)
+        contour.merge_vertices(0.01)
         self.contours[index] = contour
         self.contours[index].transform(tMatrix_back)
         # self.contours[index].transform(self.first_transform)  # apply first layer transform to all layers for consistency
@@ -811,4 +820,4 @@ class zSlicer:
         }
         
         with open(filepath, 'w') as f:
-            json.dump(export_data, f, indent=2) 
+            json.dump(export_data, f, indent=2)

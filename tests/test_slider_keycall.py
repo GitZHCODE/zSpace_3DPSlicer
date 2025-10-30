@@ -1,6 +1,6 @@
 from compas_viewer import Viewer
 from compas_viewer.events import KeyEvent
-from compas.geometry import Sphere, Point, Frame
+from compas.geometry import Sphere, Point, Frame, Line
 from PySide6.QtWidgets import QSlider, QLabel, QVBoxLayout, QWidget, QDockWidget
 from PySide6.QtCore import Qt
 import random
@@ -15,6 +15,9 @@ viewer.scene.add(initial_sphere, name="Initial Sphere")
 # Variable to store slider value
 slider_value = 1.0
 
+# Stack of added spheres and their companion line objects
+added_spheres = []
+
 def add_sphere():
     """Add a sphere with radius controlled by slider."""
     x = random.uniform(-5, 5)
@@ -24,40 +27,62 @@ def add_sphere():
     # Use slider_value for the sphere radius
     frame = Frame(Point(x, y, z))
     sphere = Sphere(radius=slider_value, frame=frame)
-    obj = viewer.scene.add(sphere, name=f"Sphere_{slider_value:.2f}")
+    sphere_obj = viewer.scene.add(sphere, name=f"Sphere_{slider_value:.2f}")
 
-    
-    # Initialize the object and add it to buffer manager
-    obj.init()
-    viewer.renderer.buffer_manager.add_object(obj)
+    sphere_obj.init()
+    viewer.renderer.buffer_manager.add_object(sphere_obj)
+
+    line_objs = []
+    for idx in range(3):
+        start = Point(random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5))
+        end = Point(random.uniform(-5, 5), random.uniform(-5, 5), random.uniform(-5, 5))
+        line = Line(start, end)
+        line_obj = viewer.scene.add(line, name=f"Line_{idx + 1}")
+        line_obj.init()
+        viewer.renderer.buffer_manager.add_object(line_obj)
+        line_objs.append(line_obj)
+
+    added_spheres.append({"sphere": sphere_obj, "lines": line_objs})
     viewer.renderer.buffer_manager.create_buffers()
     
     # Force a repaint of the viewport
     viewer.renderer.update()
-    print(f"Added sphere at ({x:.2f}, {y:.2f}, {z:.2f}) with radius {slider_value:.2f}")
+    viewer.ui.sidebar.update()
+    print(
+        f"Added sphere at ({x:.2f}, {y:.2f}, {z:.2f}) with radius {slider_value:.2f} and {len(line_objs)} lines"
+    )
 
 def remove_last_sphere():
     """Remove the last added sphere."""
-    if len(viewer.scene.objects) > 1:  # Keep the initial sphere
-        obj = viewer.scene.objects[-1]
-        print(f"Removing sphere: {obj.name}")
-        viewer.scene.remove(obj)
-        
-        # Clear and rebuild the buffer manager
-        viewer.renderer.buffer_manager.clear()
-        viewer.renderer.buffer_manager.objects.clear()  # Important: clear the objects dict too
-        print("Cleared buffer manager")
-        
-        for scene_obj in viewer.scene.objects:
-            viewer.renderer.buffer_manager.add_object(scene_obj)
-            print(f"Re-added {scene_obj.name} to buffer manager")
-        
-        viewer.renderer.buffer_manager.create_buffers()
-        print(f"Recreated buffers. Remaining objects: {len(viewer.scene.objects)}")
-        
-        viewer.renderer.update()
-    else:
+    if not added_spheres:
         print("Only initial sphere left, cannot remove.")
+        return
+
+    record = added_spheres.pop()
+    sphere_obj = record["sphere"]
+    line_objs = record["lines"]
+
+    for line_obj in line_objs:
+        print(f"Removing line: {line_obj.name}")
+        viewer.scene.remove(line_obj)
+
+    print(f"Removing sphere: {sphere_obj.name}")
+    viewer.scene.remove(sphere_obj)
+
+    # Clear and rebuild the buffer manager to reflect removals
+    viewer.renderer.buffer_manager.clear()
+    viewer.renderer.buffer_manager.objects.clear()
+
+    for scene_obj in viewer.scene.objects:
+        viewer.renderer.buffer_manager.add_object(scene_obj)
+
+    viewer.renderer.buffer_manager.create_buffers()
+    print(
+        f"Recreated buffers. Remaining spheres: {len(added_spheres)} plus initial, lines removed: {len(line_objs)}"
+    )
+
+    viewer.renderer.update()
+    viewer.ui.sidebar.update()
 
 def on_slider_change(value):
     """Callback when slider value changes."""
