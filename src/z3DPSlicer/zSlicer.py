@@ -43,7 +43,7 @@ class zSlicer:
         """
         self.blockMesh.from_compas_mesh(compas_mesh)
         mesh_copy = compas_mesh.copy()
-        mesh_copy.quads_to_triangles()
+        # mesh_copy.quads_to_triangles()
         self.sliceMesh.from_compas_mesh(mesh_copy)
 
     def init_field(self, x_res, y_res):
@@ -258,8 +258,8 @@ class zSlicer:
                 v1 = [vertices[v1_idx * 3], vertices[v1_idx * 3 + 1], vertices[v1_idx * 3 + 2]]
                 v2 = [vertices[v2_idx * 3], vertices[v2_idx * 3 + 1], vertices[v2_idx * 3 + 2]]
                 # Calculate point along the line segment (0.45 or 0.55 based on staggering)
-                stagger_min = 0.45 if shape == "line" else 0.7
-                stagger_max = 0.55 if shape == "line" else 0.8
+                stagger_min = 0.45 if shape == "line" else 0.5
+                stagger_max = 0.55 if shape == "line" else 0.55
                 t = stagger_max if layer_index % 2 == 0 else stagger_min
                 point_on_line = [
                     v1[0] + t * (v2[0] - v1[0]),
@@ -445,41 +445,20 @@ class zSlicer:
                     self.polygon_contours.append(None)
             else:
                 self.polygon_contours.append(None)
-
     def _manual_mesh_plane_intersection(self, compas_mesh, plane_origin, plane_normal):
-        """Manual mesh-plane intersection using COMPAS edge-plane intersections.
-        
-        Parameters
-        ----------
-        compas_mesh : compas.datastructures.Mesh
-            The mesh to intersect
-        plane_origin : compas.geometry.Point
-            Origin point of the cutting plane
-        plane_normal : compas.geometry.Vector
-            Normal vector of the cutting plane
-            
-        Returns
-        -------
-        zGraph or None
-            The resulting intersection graph, or None if no intersection
-        """
+        """Manual mesh-plane intersection with proper point ordering."""
         try:
             plane = (plane_origin, plane_normal)
             intersection_points = []
-            intersection_edges = []
+            point_to_edges = {}  # Map point to edges that use it
             
-            # Get all mesh edges and check for plane intersections
+            # Get all mesh edges and find intersections
             for edge in compas_mesh.edges():
                 u, v = edge
-                
-                # Get vertex positions
                 u_pos = compas_mesh.vertex_coordinates(u)
                 v_pos = compas_mesh.vertex_coordinates(v)
-                
-                # Create edge segment
                 edge_segment = (u_pos, v_pos)
                 
-                # Check intersection with plane
                 intersection_point = intersection_segment_plane(edge_segment, plane)
                 
                 if intersection_point is not None:
@@ -488,58 +467,71 @@ class zSlicer:
             if len(intersection_points) < 2:
                 return None
             
-            # Remove duplicate points
+            # Remove duplicates
             unique_points = []
-            tolerance = 0.0001
+            tolerance = 0.01
+            point_indices = {}  # Map unique point to its index
             
             for point in intersection_points:
                 is_duplicate = False
-                for existing_point in unique_points:
+                for i, existing_point in enumerate(unique_points):
                     distance = ((point[0] - existing_point[0])**2 + 
-                               (point[1] - existing_point[1])**2 + 
-                               (point[2] - existing_point[2])**2) ** 0.5
+                            (point[1] - existing_point[1])**2 + 
+                            (point[2] - existing_point[2])**2) ** 0.5
                     if distance < tolerance:
                         is_duplicate = True
+                        point_indices[tuple(point)] = i
                         break
                 if not is_duplicate:
+                    point_indices[tuple(point)] = len(unique_points)
                     unique_points.append(point)
             
             if len(unique_points) < 2:
                 return None
             
-            # Create vertices array
+            # Sort by angle around centroid (works for planar contours)
+            centroid = [
+                sum(p[0] for p in unique_points) / len(unique_points),
+                sum(p[1] for p in unique_points) / len(unique_points),
+                sum(p[2] for p in unique_points) / len(unique_points)
+            ]
+            
+            import math
+            def angle_from_centroid(point):
+                return math.atan2(point[1] - centroid[1], point[0] - centroid[0])
+            
+            # Sort points by angle
+            sorted_indices = sorted(range(len(unique_points)), 
+                                key=lambda i: angle_from_centroid(unique_points[i]))
+            sorted_points = [unique_points[i] for i in sorted_indices]
+            
+            # Create vertices and edges in proper sequence
             all_vertices = []
-            for point in unique_points:
+            for point in sorted_points:
                 all_vertices.extend([float(point[0]), float(point[1]), float(point[2])])
             
-            # Create edges connecting consecutive points (simple line segments)
+            # Create sequential edges
             all_edges = []
-            for i in range(len(unique_points) - 1):
+            for i in range(len(sorted_points) - 1):
                 all_edges.extend([i, i + 1])
-
-            all_edges.extend([len(unique_points) - 1, 0])  # Close the loop
+            all_edges.extend([len(sorted_points) - 1, 0])  # Close the loop
             
-            if len(all_vertices) == 0 or len(all_edges) == 0:
-                return None
-                
             # Create zGraph
             vertices_array = np.array(all_vertices, dtype=np.float64)
             edges_array = np.array(all_edges, dtype=np.int32)
-            # print(f"Manual intersection produced {len(unique_points)} unique points.")
-            # print("Unique Points:", unique_points)
-            # print("Edges:", all_edges)
             zgraph = zGraph()
             success = zgraph.create_graph(vertices_array, edges_array)
             
             if success:
                 return zgraph
             else:
+                print("Failed to create zGraph from intersection points.")
                 return None
                 
         except Exception as e:
             print(f"Error in manual mesh-plane intersection: {e}")
-            return None
-    
+            return None  
+        
     def update_contour(self, index, print_width,shape="line", line_number=3):
         """Update a specific contour by transforming it to frame coordinates, offsetting, and transforming back.
         
@@ -629,7 +621,7 @@ class zSlicer:
         field.smooth_field(num_smooth=1)
         contour = field.get_iso_contour(0.0)
         # contour = field.get_iso_contour_direct(0.0)
-        contour.merge_vertices(0.01)
+        contour.merge_vertices(0.005)
         self.contours[index] = contour
         self.contours[index].transform(tMatrix_back)
         # self.contours[index].transform(self.first_transform)  # apply first layer transform to all layers for consistency
@@ -725,6 +717,7 @@ class zSlicer:
         """
         return self.fields
 
+
     def export_contours(self, filepath, print_width, print_height):
         """Export contours to a JSON file with print plane data.
         
@@ -746,17 +739,80 @@ class zSlicer:
             if contour is not None and i < len(self.frames):
                 # Get current frame and center
                 current_frame = self.frames[i]
-                current_center = self.centers[i] if i < len(self.centers) else [0, 0, 0]
+                current_center = [0, 0, 0]
                 
                 # Convert zGraph to network for export
                 network = contour.to_compas_network()
                 
                 # Get all vertices with their positions
-                ordered_vertices = []
+                vertices_with_distances = []
                 for node in network.nodes():
                     xyz = network.node_attributes(node, 'xyz')
                     if xyz:
-                        ordered_vertices.append([xyz[0], xyz[1], xyz[2]])
+                        vertex_pos = [xyz[0], xyz[1], xyz[2]]
+                        # Calculate distance to SDF center
+                        dist_to_center = math.sqrt(
+                            (xyz[0] - current_center[0])**2 + 
+                            (xyz[1] - current_center[1])**2 + 
+                            (xyz[2] - current_center[2])**2
+                        )
+                        vertices_with_distances.append((node, vertex_pos, dist_to_center))
+                
+                # Sort vertices by distance to center (closest first for seam point)
+                vertices_with_distances.sort(key=lambda x: x[2])
+                
+                # Reorder vertices starting from the closest to center (seam point)
+                if vertices_with_distances:
+                    seam_node = vertices_with_distances[0][0]
+                    
+                    # Build ordered vertex list starting from seam point
+                    ordered_vertices = []
+                    visited = set()
+                    current_node = seam_node
+                    
+                    # Try to build a connected path from the seam point
+                    while current_node is not None and current_node not in visited:
+                        visited.add(current_node)
+                        xyz = network.node_attributes(current_node, 'xyz')
+                        if xyz:
+                            ordered_vertices.append([xyz[0], xyz[1], xyz[2]])
+                        
+                        # Find next connected node that hasn't been visited
+                        next_node = None
+                        for neighbor in network.neighbors(current_node):
+                            if neighbor not in visited:
+                                next_node = neighbor
+                                break
+                        current_node = next_node
+                    
+                    # If we didn't get all vertices, add the remaining ones
+                    if len(ordered_vertices) < len(vertices_with_distances):
+                        for node, vertex_pos, _ in vertices_with_distances:
+                            if node not in visited:
+                                ordered_vertices.append(vertex_pos)
+                    # updates contour vertices to new ordering
+                    if ordered_vertices:
+                        # Flatten vertex positions for zGraph
+                        new_contour = zGraph()
+                        vertices_flat = []
+                        for vertex_pos in ordered_vertices:
+                            vertices_flat.extend([vertex_pos[0], vertex_pos[1], vertex_pos[2]])
+                        
+                        # Create edges connecting consecutive vertices in a loop
+                        edges_flat = []
+                        num_vertices = len(ordered_vertices)
+                        for j in range(num_vertices):
+                            next_idx = (j + 1) % num_vertices  # Loop back to 0 at the end
+                            edges_flat.extend([j, next_idx])
+                        
+                        # Update the contour using zGraph methods
+                        vertices_array = np.array(vertices_flat, dtype=np.float64)
+                        edges_array = np.array(edges_flat, dtype=np.int32)
+                        new_contour.create_graph(vertices_array, edges_array)
+                        self.contours[i] = new_contour
+
+                else:
+                    ordered_vertices = []
                 
                 # Create print plane data for each vertex
                 print_planes = []
@@ -820,4 +876,4 @@ class zSlicer:
         }
         
         with open(filepath, 'w') as f:
-            json.dump(export_data, f, indent=2)
+            json.dump(export_data, f, indent=2) 
