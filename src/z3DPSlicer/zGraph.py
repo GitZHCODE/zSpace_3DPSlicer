@@ -86,7 +86,9 @@ class zGraph:
 
     def to_compas_network(self):
         """Convert zSpace graph to COMPAS Network datastructure."""
+        print("zGraph.to_compas_network: converting zSpace graph to COMPAS Network")
         vertices_array, edges_array = self.zgraph.get_graph_data()
+        print("zGraph.to_compas_network: retrieved", len(vertices_array)//3, "vertices and", len(edges_array)//2, "edges")
         vertices = vertices_array.tolist()
         edges = edges_array.tolist()
         
@@ -159,5 +161,146 @@ class zGraph:
         tMatrix = tMatrix.flatten()
         
         # Call C++ transform method
-        return self.zgraph.transform(tMatrix) 
-    
+        return self.zgraph.transform(tMatrix)
+
+    def interpolate(self, other_graph, t):
+        """Interpolate between this graph and another graph using linear interpolation (lerp).
+        
+        Checks if both graphs have the same topology (same number of vertices and edges 
+        with the same connectivity) before performing interpolation.
+        
+        Parameters
+        ----------
+        other_graph : zGraph
+            The target graph to interpolate towards
+        t : float
+            Interpolation parameter in range [0, 1]
+            - t=0 returns a copy of this graph
+            - t=1 returns a copy of the other_graph
+            - t=0.5 returns the midpoint between the two graphs
+            
+        Returns
+        -------
+        zGraph
+            A new interpolated graph with the same topology as both input graphs
+            
+        Raises
+        ------
+        ValueError
+            If the graphs don't have the same topology (vertex/edge count mismatch
+            or different edge connectivity)
+        """
+        # Validate input parameter
+        if not isinstance(other_graph, zGraph):
+            raise ValueError("other_graph must be a zGraph instance")
+        
+        t = float(t)
+        if t < 0.0 or t > 1.0:
+            raise ValueError("t must be in range [0, 1]")
+        
+        # Get graph data from both graphs
+        self_vertices, self_edges = self.get_graph_data()
+        other_vertices, other_edges = other_graph.get_graph_data()
+        
+        # Check vertex count
+        if len(self_vertices) != len(other_vertices):
+            raise ValueError(
+                f"Graphs have different vertex counts: {len(self_vertices)} vs {len(other_vertices)}"
+            )
+        
+        # Check edge count
+        if len(self_edges) != len(other_edges):
+            raise ValueError(
+                f"Graphs have different edge counts: {len(self_edges)} vs {len(other_edges)}"
+            )
+        
+        # Check edge connectivity - must have same edges in same order
+        if not np.array_equal(self_edges, other_edges):
+            raise ValueError(
+                "Graphs have different topology (edge connectivity mismatch)"
+            )
+        
+        # Perform linear interpolation of vertex positions
+        # Reshape vertices to (n_vertices, 3) for easier interpolation
+        n_vertices = len(self_vertices) // 3
+        
+        self_verts_3d = self_vertices.reshape(-1, 3)
+        other_verts_3d = other_vertices.reshape(-1, 3)
+        
+        # Interpolate: result = self + t * (other - self)
+        interpolated_verts_3d = self_verts_3d + t * (other_verts_3d - self_verts_3d)
+        
+        # Flatten back to original format
+        interpolated_vertices = interpolated_verts_3d.flatten()
+        
+        # Create new graph with interpolated vertices
+        result_graph = zGraph()
+        success = result_graph.create_graph(interpolated_vertices, self_edges)
+        
+        if not success:
+            raise Exception("Failed to create interpolated graph")
+        
+        return result_graph
+
+    def project_to_plane(self, plane):
+        """Project all graph vertices onto a plane.
+        
+        Projects each vertex orthogonally onto the specified plane.
+        
+        Parameters
+        ----------
+        plane : compas.geometry.Frame or compas.geometry.Plane
+            The plane to project vertices onto. Can be either a Frame or Plane object.
+            If Frame: uses the frame's point and zaxis (normal)
+            If Plane: uses the plane's point and normal
+            
+        Returns
+        -------
+        zGraph
+            A new graph with vertices projected onto the plane, maintaining the same topology
+        """
+        # Extract plane properties
+        if hasattr(plane, 'point') and hasattr(plane, 'zaxis'):
+            # It's a Frame
+            plane_point = np.array([plane.point.x, plane.point.y, plane.point.z])
+            plane_normal = np.array([plane.zaxis.x, plane.zaxis.y, plane.zaxis.z])
+        elif hasattr(plane, 'point') and hasattr(plane, 'normal'):
+            # It's a Plane
+            plane_point = np.array([plane.point.x, plane.point.y, plane.point.z])
+            plane_normal = np.array([plane.normal.x, plane.normal.y, plane.normal.z])
+        else:
+            raise ValueError("plane must be a Frame or Plane object with point and normal/zaxis attributes")
+        
+        # Normalize the plane normal
+        plane_normal = plane_normal / np.linalg.norm(plane_normal)
+        
+        # Get graph data
+        vertices, edges = self.get_graph_data()
+        
+        # Reshape vertices to (n_vertices, 3)
+        vertices_3d = vertices.reshape(-1, 3)
+        
+        # Project each vertex onto the plane
+        # Formula: projected_point = point - ((point - plane_point) · normal) * normal
+        projected_vertices = []
+        for vertex in vertices_3d:
+            vertex_array = np.array(vertex)
+            # Vector from plane point to vertex
+            to_vertex = vertex_array - plane_point
+            # Distance from plane (signed)
+            distance = np.dot(to_vertex, plane_normal)
+            # Project onto plane
+            projected_vertex = vertex_array - distance * plane_normal
+            projected_vertices.append(projected_vertex)
+        
+        projected_vertices_3d = np.array(projected_vertices)
+        projected_vertices_flat = projected_vertices_3d.flatten()
+        
+        # Create new graph with projected vertices
+        result_graph = zGraph()
+        success = result_graph.create_graph(projected_vertices_flat, edges)
+        
+        if not success:
+            raise Exception("Failed to create projected graph")
+        
+        return result_graph
